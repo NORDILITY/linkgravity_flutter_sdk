@@ -1,0 +1,58 @@
+name: smartlink_flutter_sdk
+description: SmartLink Flutter SDK for deferred deep linking, link generation, and app-to-app attribution. Compatible with FlutterFlow.
+version: 1.0.0
+homepage: https://github.com/yourusername/smartlink_flutter_sdk
+
+environment:
+  sdk: ^3.10.0
+  flutter: '>=3.38.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # HTTP networking
+  http: ^1.6.0
+
+  # Local storage
+  shared_preferences: ^2.5.3
+
+  # Deep linking (app_links is the modern replacement for uni_links)
+  app_links: ^7.0.0
+
+  # Device information
+  device_info_plus: ^12.2.0
+
+  # Package/App information
+  package_info_plus: ^9.0.0
+
+  # UUID generation
+  uuid: ^4.5.2
+
+  # Cryptography for fingerprinting
+  crypto: ^3.0.7
+
+  # Network connectivity
+  connectivity_plus: ^7.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Linting
+  flutter_lints: ^6.0.0
+
+  # Mocking for tests
+  mockito: ^5.5.1
+
+  # Code generation
+  build_runner: ^2.10.3
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.smartlink.smartlink_flutter_sdk
+        pluginClass: SmartlinkFlutterSdkPlugin
+      ios:
+        pluginClass: SmartlinkFlutterSdkPlugin
