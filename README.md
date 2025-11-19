@@ -17,6 +17,11 @@ A comprehensive Flutter SDK for **deferred deep linking**, **link generation**, 
 - FlutterFlow Compatible - Ready-to-use Custom Actions
 - Privacy-Focused - Device fingerprinting without IDFA/GAID
 
+## Requirements
+
+- Dart SDK: `>=3.0.0 <4.0.0` (Compatible with Dart 3.8.1 for FlutterFlow)
+- Flutter: `>=3.10.0`
+
 ## Installation
 
 Add to your pubspec.yaml:

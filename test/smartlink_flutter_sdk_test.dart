@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smartlink_flutter_sdk/smartlink_flutter_sdk.dart';
-import 'package:http/http.dart' as http;
 
 // Generate mocks with: flutter pub run build_runner build
 void main() {
