@@ -417,11 +417,16 @@ class ApiService {
 
   /// Get SDK configuration
   /// GET /api/v1/sdk/config
+  ///
+  /// Returns SDK configuration from backend including:
+  /// - version: Config version number
+  /// - deferredLinkTimeout: Timeout for deferred link matching in ms
+  /// - enableAnalytics: Whether analytics is enabled
   Future<Map<String, dynamic>> getSdkConfig() async {
     final response = await _get('/api/v1/sdk/config');
 
-    if (response['success'] == true && response['data'] != null) {
-      return response['data'] as Map<String, dynamic>;
+    if (response['success'] == true && response['config'] != null) {
+      return response['config'] as Map<String, dynamic>;
     }
 
     return {};

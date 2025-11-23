@@ -1,7 +1,8 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:smartlink_flutter_sdk/src/services/api_service.dart';
-
-// Generate mocks with: flutter pub run build_runner build
 
 void main() {
   group('ApiService Authentication', () {
@@ -102,6 +103,113 @@ void main() {
       expect(exception.message, equals('Network error'));
       expect(exception.statusCode, isNull);
       expect(exception.toString(), contains('ApiException: Network error'));
+    });
+  });
+
+  group('ApiService getSdkConfig', () {
+    test('should parse config from response correctly', () async {
+      // Backend response format as documented in sdk.controller.ts:907-922
+      final mockResponse = {
+        'success': true,
+        'config': {
+          'version': 1,
+          'deferredLinkTimeout': 3000,
+          'enableAnalytics': true,
+        },
+        'cached': true,
+      };
+
+      final mockClient = MockClient((request) async {
+        expect(request.url.path, equals('/api/v1/sdk/config'));
+        return http.Response(jsonEncode(mockResponse), 200);
+      });
+
+      final apiService = ApiService(
+        baseUrl: 'https://api.smartlink.io',
+        apiKey: 'pk_test_123',
+        client: mockClient,
+      );
+
+      final config = await apiService.getSdkConfig();
+
+      expect(config['version'], equals(1));
+      expect(config['deferredLinkTimeout'], equals(3000));
+      expect(config['enableAnalytics'], equals(true));
+    });
+
+    test('should return empty map when config is null', () async {
+      final mockResponse = {
+        'success': true,
+        'config': null,
+      };
+
+      final mockClient = MockClient((request) async {
+        return http.Response(jsonEncode(mockResponse), 200);
+      });
+
+      final apiService = ApiService(
+        baseUrl: 'https://api.smartlink.io',
+        apiKey: 'pk_test_123',
+        client: mockClient,
+      );
+
+      final config = await apiService.getSdkConfig();
+
+      expect(config, isEmpty);
+    });
+
+    test('should return empty map when success is false', () async {
+      final mockResponse = {
+        'success': false,
+        'config': {
+          'version': 1,
+        },
+      };
+
+      final mockClient = MockClient((request) async {
+        return http.Response(jsonEncode(mockResponse), 200);
+      });
+
+      final apiService = ApiService(
+        baseUrl: 'https://api.smartlink.io',
+        apiKey: 'pk_test_123',
+        client: mockClient,
+      );
+
+      final config = await apiService.getSdkConfig();
+
+      expect(config, isEmpty);
+    });
+
+    test('should not parse data field (regression test for bug fix)', () async {
+      // This test ensures we don't accidentally revert to the old 'data' field
+      final mockResponse = {
+        'success': true,
+        'data': {
+          'wrongField': 'should not be parsed',
+        },
+        'config': {
+          'version': 2,
+          'correctField': true,
+        },
+      };
+
+      final mockClient = MockClient((request) async {
+        return http.Response(jsonEncode(mockResponse), 200);
+      });
+
+      final apiService = ApiService(
+        baseUrl: 'https://api.smartlink.io',
+        apiKey: 'pk_test_123',
+        client: mockClient,
+      );
+
+      final config = await apiService.getSdkConfig();
+
+      // Should parse 'config', not 'data'
+      expect(config['version'], equals(2));
+      expect(config['correctField'], equals(true));
+      expect(config['wrongField'], isNull);
     });
   });
 }
