@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../models/utm_params.dart';
 import '../utils/logger.dart';
+import 'storage_service.dart';
 
 /// Service for handling Android Play Install Referrer API (Native Implementation)
 ///
@@ -23,12 +25,19 @@ import '../utils/logger.dart';
 /// ```
 class InstallReferrerService {
   static const _channel = MethodChannel('smartlink_flutter_sdk');
+  static const String _keyInstallUTM = 'smartlink_install_utm';
 
   static bool _checked = false;
   static String? _referrerToken;
   static String? _rawReferrer;
   static int? _installTimestamp;
   static int? _clickTimestamp;
+  static UTMParams? _cachedUTM;
+
+  final StorageService _storage;
+
+  /// Create Install Referrer Service
+  InstallReferrerService(this._storage);
 
   /// Check if we're on Android
   bool get isAndroid => Platform.isAndroid;
@@ -123,6 +132,10 @@ class InstallReferrerService {
       }
 
       _checked = true;
+
+      // Cache UTM parameters from referrer
+      await _cacheUTMParams();
+
       return _referrerToken;
     } on PlatformException catch (e) {
       SmartLinkLogger.error('Platform error retrieving install referrer', e);
@@ -187,6 +200,78 @@ class InstallReferrerService {
     }
   }
 
+  /// Get all UTM parameters from install referrer
+  ///
+  /// Returns UTMParams with all 5 standard UTM fields extracted from the
+  /// Android Play Install Referrer string.
+  ///
+  /// Example referrer format:
+  /// `utm_source=facebook&utm_campaign=summer_sale&utm_medium=cpc&deferred_link=<token>`
+  ///
+  /// Returns empty UTMParams if referrer is not available or has no UTM parameters.
+  UTMParams getUTMParams() {
+    if (_rawReferrer == null) {
+      return const UTMParams.empty();
+    }
+
+    if (_cachedUTM != null) {
+      return _cachedUTM!;
+    }
+
+    try {
+      final utm = UTMParams.fromQueryString(_rawReferrer!);
+      _cachedUTM = utm;
+      return utm ?? const UTMParams.empty();
+    } catch (e) {
+      SmartLinkLogger.error('Failed to extract UTM from referrer', e);
+      return const UTMParams.empty();
+    }
+  }
+
+  /// Cache UTM parameters from referrer to local storage
+  ///
+  /// Called automatically when install referrer is retrieved.
+  /// UTM parameters are persisted so they can be accessed later for attribution.
+  Future<void> _cacheUTMParams() async {
+    final utm = getUTMParams();
+    if (utm.isNotEmpty) {
+      try {
+        await _storage.saveData(_keyInstallUTM, utm.toJson());
+        SmartLinkLogger.debug('UTM parameters cached: $utm');
+      } catch (e) {
+        SmartLinkLogger.error('Failed to cache UTM parameters', e);
+      }
+    }
+  }
+
+  /// Get cached UTM parameters from install (persistent)
+  ///
+  /// Retrieves UTM parameters that were stored when the app was installed.
+  /// These remain available even after app restarts.
+  ///
+  /// Returns null if no cached UTM parameters are found.
+  ///
+  /// Example:
+  /// ```dart
+  /// final utm = await service.getCachedInstallUTM();
+  /// if (utm != null) {
+  ///   print('Installed from: ${utm.source}');
+  ///   print('Campaign: ${utm.campaign}');
+  /// }
+  /// ```
+  Future<UTMParams?> getCachedInstallUTM() async {
+    try {
+      final data = await _storage.getData(_keyInstallUTM);
+      if (data != null) {
+        return UTMParams.fromJson(data as Map<String, dynamic>);
+      }
+      return null;
+    } catch (e) {
+      SmartLinkLogger.error('Failed to retrieve cached install UTM', e);
+      return null;
+    }
+  }
+
   /// Clear cached referrer (for testing)
   void clearCache() {
     _checked = false;
@@ -194,5 +279,6 @@ class InstallReferrerService {
     _rawReferrer = null;
     _installTimestamp = null;
     _clickTimestamp = null;
+    _cachedUTM = null;
   }
 }

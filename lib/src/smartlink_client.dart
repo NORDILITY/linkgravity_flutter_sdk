@@ -6,12 +6,14 @@ import 'models/link_params.dart';
 import 'models/attribution.dart';
 import 'models/deep_link_data.dart';
 import 'models/analytics_event.dart';
+import 'models/utm_params.dart';
 import 'services/api_service.dart';
 import 'services/storage_service.dart';
 import 'services/fingerprint_service.dart';
 import 'services/deep_link_service.dart';
 import 'services/deferred_deep_link_service.dart';
 import 'services/analytics_service.dart';
+import 'services/install_referrer_service.dart';
 import 'smartlink_config.dart';
 import 'utils/logger.dart';
 
@@ -65,6 +67,7 @@ class SmartLinkClient {
   late final StorageService _storage;
   late final FingerprintService _fingerprint;
   late final DeepLinkService _deepLink;
+  late final InstallReferrerService _installReferrer;
   late final AnalyticsService _analytics;
 
   /// Whether SDK has been initialized
@@ -97,9 +100,11 @@ class SmartLinkClient {
       timeout: config.requestTimeout,
     );
     _deepLink = DeepLinkService();
+    _installReferrer = InstallReferrerService(_storage);
     _analytics = AnalyticsService(
       api: _api,
       storage: _storage,
+      installReferrer: _installReferrer,
       batchSize: config.batchSize,
       batchTimeout: config.batchTimeout,
       enabled: config.enableAnalytics,
@@ -532,6 +537,100 @@ class SmartLinkClient {
   /// Get failed events count (offline queue)
   Future<int> getFailedEventsCount() async {
     return await _analytics.getFailedEventsCount();
+  }
+
+  // ============================================================================
+  // UTM ATTRIBUTION
+  // ============================================================================
+
+  /// Get UTM parameters from Android Install Referrer (Android only)
+  ///
+  /// Returns UTM parameters extracted from the Play Store Install Referrer.
+  /// Only available on Android devices and only after the install referrer
+  /// has been retrieved (happens automatically on first app launch).
+  ///
+  /// Returns empty UTMParams if:
+  /// - Device is not Android
+  /// - Install referrer hasn't been retrieved yet
+  /// - Install referrer contains no UTM parameters
+  ///
+  /// Example:
+  /// ```dart
+  /// final utm = smartLink.getInstallReferrerUTM();
+  /// if (utm.isNotEmpty) {
+  ///   print('Installed from: ${utm.source}');
+  ///   print('Campaign: ${utm.campaign}');
+  /// }
+  /// ```
+  UTMParams getInstallReferrerUTM() {
+    return _installReferrer.getUTMParams();
+  }
+
+  /// Get cached UTM parameters from install (persistent)
+  ///
+  /// Retrieves UTM parameters that were stored when the app was installed.
+  /// These remain available even after app restarts.
+  ///
+  /// Returns null if no cached UTM parameters are found.
+  ///
+  /// Example:
+  /// ```dart
+  /// final utm = await smartLink.getCachedInstallUTM();
+  /// if (utm != null) {
+  ///   print('Original install source: ${utm.source}');
+  ///   print('Original campaign: ${utm.campaign}');
+  /// }
+  /// ```
+  Future<UTMParams?> getCachedInstallUTM() async {
+    return await _installReferrer.getCachedInstallUTM();
+  }
+
+  /// Get current UTM attribution parameters
+  ///
+  /// Returns the UTM parameters that are currently being auto-attached
+  /// to all analytics events. This is typically the install UTM from the
+  /// Play Store Install Referrer (Android) or deferred deep link (iOS).
+  ///
+  /// Returns null if no UTM attribution is active.
+  ///
+  /// Example:
+  /// ```dart
+  /// final utm = smartLink.currentUTM;
+  /// if (utm != null) {
+  ///   print('Current attribution: ${utm.source} / ${utm.campaign}');
+  /// }
+  /// ```
+  UTMParams? get currentUTM => _analytics.cachedUTM;
+
+  /// Set custom UTM parameters for attribution
+  ///
+  /// Override the automatic install UTM with custom values.
+  /// This affects all future analytics events until changed or cleared.
+  ///
+  /// Use cases:
+  /// - Attribute events to a re-engagement campaign
+  /// - Track events from an email link click
+  /// - Custom attribution for specific user flows
+  ///
+  /// Pass null to clear and revert to install UTM.
+  ///
+  /// Example:
+  /// ```dart
+  /// // Set custom UTM for email campaign
+  /// smartLink.setUTM(UTMParams(
+  ///   source: 'email',
+  ///   campaign: 'summer-2024',
+  ///   medium: 'newsletter',
+  /// ));
+  ///
+  /// // Track events with this attribution
+  /// await smartLink.trackEvent('purchase', {'amount': 99.99});
+  ///
+  /// // Clear custom UTM (revert to install UTM)
+  /// smartLink.setUTM(null);
+  /// ```
+  void setUTM(UTMParams? utm) {
+    _analytics.setUTM(utm);
   }
 
   // ============================================================================

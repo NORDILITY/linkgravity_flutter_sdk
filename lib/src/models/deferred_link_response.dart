@@ -1,3 +1,5 @@
+import 'utm_params.dart';
+
 /// Response from deferred link lookup endpoints
 ///
 /// This model represents the response from both:
@@ -96,6 +98,32 @@ class DeferredLinkResponse {
   /// Get deep link parameters
   Map<String, dynamic>? get params =>
       deepLinkData?['params'] as Map<String, dynamic>?;
+
+  /// Get UTM parameters from deep link data
+  ///
+  /// Returns UTM parameters that were passed through from the original
+  /// short link click (e.g., utm_source=facebook&utm_campaign=summer).
+  ///
+  /// These UTM parameters enable complete attribution tracking from
+  /// ad click → app install → conversion.
+  ///
+  /// Returns null if no UTM parameters were present in the original link.
+  ///
+  /// Example:
+  /// ```dart
+  /// final response = await deferredService.matchDeferredDeepLink();
+  /// if (response != null && response.utm != null) {
+  ///   print('Installed from: ${response.utm!.source}');
+  ///   print('Campaign: ${response.utm!.campaign}');
+  /// }
+  /// ```
+  UTMParams? get utm {
+    final utmData = deepLinkData?['utm'];
+    if (utmData != null && utmData is Map<String, dynamic>) {
+      return UTMParams.fromJson(utmData);
+    }
+    return null;
+  }
 
   /// Check if this was a deterministic match (Android referrer)
   bool get isDeterministic => matchMethod == 'referrer';

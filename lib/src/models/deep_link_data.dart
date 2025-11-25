@@ -1,3 +1,5 @@
+import 'utm_params.dart';
+
 /// Parsed deep link data
 class DeepLinkData {
   /// The path component of the deep link (e.g., "/product/123")
@@ -15,22 +17,32 @@ class DeepLinkData {
   /// Full original URI
   final Uri? originalUri;
 
+  /// UTM parameters extracted from the deep link (if present)
+  final UTMParams? utm;
+
   DeepLinkData({
     required this.path,
     required this.params,
     required this.scheme,
     this.host,
     this.originalUri,
+    this.utm,
   });
 
   /// Create from URI
+  ///
+  /// Automatically extracts UTM parameters from the URI if present.
   factory DeepLinkData.fromUri(Uri uri) {
+    // Extract UTM parameters from URI
+    final utm = UTMParams.fromUri(uri);
+
     return DeepLinkData(
       path: uri.path,
       params: uri.queryParameters,
       scheme: uri.scheme,
       host: uri.host.isNotEmpty ? uri.host : null,
       originalUri: uri,
+      utm: utm,
     );
   }
 
@@ -48,6 +60,7 @@ class DeepLinkData {
       'scheme': scheme,
       if (host != null) 'host': host,
       if (originalUri != null) 'originalUri': originalUri.toString(),
+      if (utm != null) 'utm': utm!.toJson(),
     };
   }
 
@@ -59,6 +72,9 @@ class DeepLinkData {
       host: json['host'] as String?,
       originalUri: json['originalUri'] != null
           ? Uri.parse(json['originalUri'] as String)
+          : null,
+      utm: json['utm'] != null
+          ? UTMParams.fromJson(json['utm'] as Map<String, dynamic>)
           : null,
     );
   }

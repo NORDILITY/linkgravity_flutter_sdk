@@ -253,6 +253,63 @@ class StorageService {
   }
 
   // ============================================================================
+  // GENERIC DATA STORAGE
+  // ============================================================================
+
+  /// Save generic data as JSON
+  ///
+  /// Stores any JSON-serializable data with the given key.
+  /// Used for UTM parameters and other custom data storage needs.
+  ///
+  /// Example:
+  /// ```dart
+  /// await storage.saveData('custom_key', {'foo': 'bar'});
+  /// ```
+  Future<void> saveData(String key, Map<String, dynamic> data) async {
+    try {
+      final prefs = await _preferences;
+      await prefs.setString(key, jsonEncode(data));
+      SmartLinkLogger.debug('Data saved for key: $key');
+    } catch (e) {
+      SmartLinkLogger.error('Failed to save data for key: $key', e);
+      rethrow;
+    }
+  }
+
+  /// Get generic data from JSON
+  ///
+  /// Retrieves JSON data stored with the given key.
+  /// Returns null if the key doesn't exist or if there's an error parsing.
+  ///
+  /// Example:
+  /// ```dart
+  /// final data = await storage.getData('custom_key');
+  /// if (data != null) {
+  ///   print('Value: ${data['foo']}');
+  /// }
+  /// ```
+  Future<Map<String, dynamic>?> getData(String key) async {
+    try {
+      final prefs = await _preferences;
+      final json = prefs.getString(key);
+      if (json != null) {
+        return jsonDecode(json) as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      SmartLinkLogger.error('Failed to load data for key: $key', e);
+      return null;
+    }
+  }
+
+  /// Remove data for a given key
+  Future<void> removeData(String key) async {
+    final prefs = await _preferences;
+    await prefs.remove(key);
+    SmartLinkLogger.debug('Data removed for key: $key');
+  }
+
+  // ============================================================================
   // GENERAL
   // ============================================================================
 

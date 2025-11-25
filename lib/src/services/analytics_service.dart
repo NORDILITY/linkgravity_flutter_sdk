@@ -2,14 +2,19 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:uuid/uuid.dart';
 import '../models/analytics_event.dart';
+import '../models/utm_params.dart';
 import 'api_service.dart';
 import 'storage_service.dart';
+import 'install_referrer_service.dart';
 import '../utils/logger.dart';
 
 /// Service for tracking analytics events with batching and offline support
+///
+/// Automatically attaches UTM parameters to all tracked events for attribution.
 class AnalyticsService {
   final ApiService _api;
   final StorageService _storage;
+  final InstallReferrerService? _installReferrer;
 
   /// Queue of events waiting to be sent
   final List<AnalyticsEvent> _eventQueue = [];
@@ -36,6 +41,9 @@ class AnalyticsService {
   /// Current device fingerprint
   String? _fingerprint;
 
+  /// Cached UTM parameters from install (for auto-attachment to events)
+  UTMParams? _cachedUTM;
+
   /// Connectivity checker
   final Connectivity _connectivity = Connectivity();
 
@@ -48,12 +56,14 @@ class AnalyticsService {
   AnalyticsService({
     required ApiService api,
     required StorageService storage,
+    InstallReferrerService? installReferrer,
     this.batchSize = 20,
     this.batchTimeout = const Duration(seconds: 30),
     this.enabled = true,
     this.offlineQueueEnabled = true,
   })  : _api = api,
-        _storage = storage;
+        _storage = storage,
+        _installReferrer = installReferrer;
 
   /// Initialize analytics service
   Future<void> initialize() async {
@@ -62,6 +72,9 @@ class AnalyticsService {
     // Load cached IDs
     _userId = await _storage.getUserId();
     _fingerprint = await _storage.getFingerprint();
+
+    // Load cached UTM parameters from install (for attribution)
+    await _loadCachedUTM();
 
     // Create new session
     await _startNewSession();
@@ -73,6 +86,19 @@ class AnalyticsService {
     await _retryFailedEvents();
 
     SmartLinkLogger.info('Analytics service initialized');
+  }
+
+  /// Load cached UTM parameters from install
+  ///
+  /// These UTM parameters are automatically attached to all tracked events
+  /// for attribution to the original marketing campaign.
+  Future<void> _loadCachedUTM() async {
+    if (_installReferrer != null) {
+      _cachedUTM = await _installReferrer!.getCachedInstallUTM();
+      if (_cachedUTM != null && _cachedUTM!.isNotEmpty) {
+        SmartLinkLogger.info('Loaded install UTM for attribution: $_cachedUTM');
+      }
+    }
   }
 
   /// Start a new session
@@ -111,6 +137,15 @@ class AnalyticsService {
   }
 
   /// Track an analytics event
+  ///
+  /// Automatically attaches UTM parameters from install for attribution.
+  /// UTM parameters are added to event properties under the 'utm' key.
+  ///
+  /// Example:
+  /// ```dart
+  /// await analytics.trackEvent('purchase', {'amount': 99.99});
+  /// // Event will include: {'amount': 99.99, 'utm': {'source': 'facebook', ...}}
+  /// ```
   Future<void> trackEvent(
     String eventName, [
     Map<String, dynamic>? properties,
@@ -121,10 +156,18 @@ class AnalyticsService {
       return;
     }
 
+    // Merge user properties with auto-attached UTM parameters
+    final eventData = <String, dynamic>{
+      ...?properties,
+      // Auto-attach UTM parameters if available (for attribution)
+      if (_cachedUTM != null && _cachedUTM!.isNotEmpty)
+        'utm': _cachedUTM!.toJson(),
+    };
+
     final event = AnalyticsEvent(
       id: const Uuid().v4(),
       name: eventName,
-      data: properties ?? {},
+      data: eventData,
       timestamp: DateTime.now(),
       userId: _userId,
       sessionId: _sessionId,
@@ -246,6 +289,39 @@ class AnalyticsService {
 
   /// Get current user ID
   String? get userId => _userId;
+
+  /// Get cached UTM parameters
+  ///
+  /// Returns the UTM parameters that are being auto-attached to all events.
+  UTMParams? get cachedUTM => _cachedUTM;
+
+  /// Manually set UTM parameters for attribution
+  ///
+  /// This overrides the automatically loaded install UTM.
+  /// Use this if you want to attribute events to a different campaign
+  /// than the original install source.
+  ///
+  /// Pass null to clear UTM attribution.
+  ///
+  /// Example:
+  /// ```dart
+  /// // Set custom UTM for this session
+  /// analytics.setUTM(UTMParams(
+  ///   source: 'email',
+  ///   campaign: 'reactivation-2024',
+  /// ));
+  ///
+  /// // Clear UTM attribution
+  /// analytics.setUTM(null);
+  /// ```
+  void setUTM(UTMParams? utm) {
+    _cachedUTM = utm;
+    if (utm != null && utm.isNotEmpty) {
+      SmartLinkLogger.info('UTM attribution set: $utm');
+    } else {
+      SmartLinkLogger.info('UTM attribution cleared');
+    }
+  }
 
   /// Dispose resources
   Future<void> dispose() async {
