@@ -13,11 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Affects `getTrackingAuthorizationStatus()` method (line 23)
   - Affects `requestTrackingAuthorization()` completion handler (line 63)
   - Resolves build errors on iOS when using the ATT framework
+- **[IOS-002] SKAdNetwork Switch Statement**: Fixed exhaustive switch warning in SKAdNetworkService
+  - Changed `@unknown default` to `default` in ConversionValue.toString() (line 171)
+  - Resolves compilation warning in iOS 16.1+ where `@unknown default` makes switch non-exhaustive
 - **[API-002] Event Batch Format**: Fixed event batch format to match backend API schema
   - Backend expects `{ events: [{ type, properties, ... }] }` format
   - SDK was sending `{ events: [{ name, data, ... }] }` format
   - Added transformation in `ApiService.sendBatch()` to convert `name` → `type` and `data` → `properties`
   - Resolves 400 Bad Request errors when sending analytics events
+
+### Improved
+- **[DEBUG-001] Enhanced Deep Link Debugging**: Added comprehensive debug logging for iOS deep link troubleshooting
+  - Added 🔍 emoji-tagged logs throughout deep link flow
+  - Shows deferred link parsing, route matching, and navigation execution
+  - Helps diagnose iOS-specific deep linking issues
 
 ### Breaking Changes
 - None (bug fix only)

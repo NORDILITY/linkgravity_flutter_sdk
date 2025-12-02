@@ -168,7 +168,7 @@ extension SKAdNetwork.CoarseConversionValue {
             return "medium"
         case .high:
             return "high"
-        @unknown default:
+        default:
             return "medium"
         }
     }

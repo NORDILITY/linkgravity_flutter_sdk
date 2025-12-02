@@ -251,6 +251,14 @@ class LinkGravityClient {
       // Uses retry logic with exponential backoff for better reliability
       final match = await deferredService.matchDeferredDeepLinkWithRetry();
 
+      LinkGravityLogger.debug('🔍 Match result: ${match != null ? "not null" : "NULL"}');
+      if (match != null) {
+        LinkGravityLogger.debug('🔍 match.success: ${match.success}');
+        LinkGravityLogger.debug('🔍 match.deepLinkUrl: ${match.deepLinkUrl}');
+        LinkGravityLogger.debug('🔍 match.linkId: ${match.linkId}');
+        LinkGravityLogger.debug('🔍 match.matchMethod: ${match.matchMethod}');
+      }
+
       if (match != null && match.success && match.deepLinkUrl != null) {
         LinkGravityLogger.info('✅ Deferred deep link found!');
         LinkGravityLogger.info('   Method: ${match.matchMethod}');
