@@ -635,7 +635,10 @@ class LinkGravityClient {
     final initialLink = _deepLink.initialLink;
     if (initialLink != null) {
       LinkGravityLogger.info('Processing initial deep link: ${initialLink.path}');
-      _handleRouteMatch(initialLink);
+      // Process initial link asynchronously (don't block registration)
+      _handleRouteMatch(initialLink).catchError((error, stackTrace) {
+        LinkGravityLogger.error('Error processing initial deep link', error, stackTrace);
+      });
       // Clear initial link after processing to prevent duplicate handling
       _deepLink.initialLink = null;
     }
@@ -643,7 +646,12 @@ class LinkGravityClient {
     // Listen for future deep links (warm start)
     _routeStreamSubscription?.cancel();
     _routeStreamSubscription = _deepLink.linkStream.listen(
-      _handleRouteMatch,
+      (deepLink) {
+        // Handle asynchronously
+        _handleRouteMatch(deepLink).catchError((error, stackTrace) {
+          LinkGravityLogger.error('Error processing deep link', error, stackTrace);
+        });
+      },
       onError: (error, stackTrace) {
         LinkGravityLogger.error('Deep link stream error', error, stackTrace);
       },
@@ -720,7 +728,11 @@ class LinkGravityClient {
   /// Handle route matching for incoming deep links
   ///
   /// This is called automatically by [registerRoutes] when a deep link is received.
-  void _handleRouteMatch(DeepLinkData deepLink) {
+  ///
+  /// If [enableAutoResolution] is true in config, this method will first attempt
+  /// to resolve the deep link path as a short code via the backend API before
+  /// matching against registered routes.
+  Future<void> _handleRouteMatch(DeepLinkData deepLink) async {
     if (_routeContext == null || _registeredRoutes == null) {
       LinkGravityLogger.warning(
           'Route context not available, cannot handle deep link');
@@ -729,21 +741,70 @@ class LinkGravityClient {
 
     LinkGravityLogger.debug('Attempting to match route for: ${deepLink.path}');
 
+    // Auto-resolution: Try to resolve as short code if enabled
+    DeepLinkData resolvedDeepLink = deepLink;
+    if (config.enableAutoResolution) {
+      final shortCode = _deepLink.extractShortCode(deepLink);
+      if (shortCode != null && shortCode.isNotEmpty) {
+        LinkGravityLogger.info(
+            '🔍 Auto-resolution enabled, attempting to resolve: $shortCode');
+
+        try {
+          final result = await resolveShortCode(shortCode);
+
+          if (result != null && result['success'] == true) {
+            final resolvedRoute = result['route'] as String?;
+            if (resolvedRoute != null && resolvedRoute.isNotEmpty) {
+              LinkGravityLogger.info(
+                  '✅ Auto-resolved: $shortCode -> $resolvedRoute');
+
+              // Create new DeepLinkData with resolved route
+              final routeUri = Uri.parse(
+                  resolvedRoute.startsWith('/') ? resolvedRoute : '/$resolvedRoute');
+              resolvedDeepLink = DeepLinkData.fromUri(routeUri);
+
+              // Set UTM parameters if present in resolution result
+              final utm = result['utm'] as Map<String, dynamic>?;
+              if (utm != null) {
+                try {
+                  setUTM(UTMParams.fromJson(utm));
+                } catch (e) {
+                  LinkGravityLogger.warning('Failed to set UTM parameters: $e');
+                }
+              }
+            } else {
+              LinkGravityLogger.warning(
+                  'Resolution succeeded but no route returned for: $shortCode');
+            }
+          } else {
+            LinkGravityLogger.debug(
+                'Resolution not found for: $shortCode, falling back to direct route matching');
+          }
+        } catch (e, stackTrace) {
+          LinkGravityLogger.error(
+              'Auto-resolution failed for $shortCode, falling back to direct route matching',
+              e,
+              stackTrace);
+        }
+      }
+    }
+
+    // Route matching: Match resolved path against registered routes
     for (final entry in _registeredRoutes!.entries) {
       final routePattern = entry.key;
       final actionBuilder = entry.value;
 
       bool matches = _matchPrefix
-          ? deepLink.path.startsWith(routePattern)
-          : deepLink.path == routePattern;
+          ? resolvedDeepLink.path.startsWith(routePattern)
+          : resolvedDeepLink.path == routePattern;
 
       if (matches) {
         LinkGravityLogger.info(
-            '✅ Matched route: $routePattern -> ${deepLink.path}');
+            '✅ Matched route: $routePattern -> ${resolvedDeepLink.path}');
 
         try {
-          final action = actionBuilder(deepLink);
-          action.execute(_routeContext!, deepLink);
+          final action = actionBuilder(resolvedDeepLink);
+          action.execute(_routeContext!, resolvedDeepLink);
         } catch (e, stackTrace) {
           LinkGravityLogger.error(
               'Error executing route action for $routePattern', e, stackTrace);
@@ -753,7 +814,7 @@ class LinkGravityClient {
       }
     }
 
-    LinkGravityLogger.warning('⚠️ No route matched for: ${deepLink.path}');
+    LinkGravityLogger.warning('⚠️ No route matched for: ${resolvedDeepLink.path}');
   }
 
   // ============================================================================
