@@ -487,14 +487,14 @@ class ApiService {
   // ============================================================================
 
   /// Match deferred deep link with device fingerprint
-  /// POST /api/v1/sdk/match-link
-  /// Requires public API key authentication
+  /// POST /api/v1/sdk/match
+  /// Public endpoint (no authentication required)
   Future<Map<String, dynamic>?> matchLink(dynamic fingerprint) async {
     try {
       LinkGravityLogger.debug('Matching deferred deep link with fingerprint');
 
       final response = await _post(
-        '/api/v1/sdk/match-link',
+        '/api/v1/sdk/match',
         fingerprint is Map ? fingerprint : fingerprint.toJson(),
       );
 
