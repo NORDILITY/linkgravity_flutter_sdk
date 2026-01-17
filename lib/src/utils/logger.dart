@@ -62,7 +62,7 @@ class LinkGravityLogger {
     final timestamp = DateTime.now().toIso8601String();
     final logMessage = '[$timestamp] [LinkGravity] [$level] $message';
 
-    if (kDebugMode) {
+    // if (kDebugMode) { // Removed to allow logging in Release mode if LogLevel allows it
       // ignore: avoid_print
       print(logMessage);
 
@@ -75,6 +75,6 @@ class LinkGravityLogger {
         // ignore: avoid_print
         print('StackTrace: $stackTrace');
       }
-    }
+    // }
   }
 }

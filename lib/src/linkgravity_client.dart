@@ -104,6 +104,10 @@ class LinkGravityClient {
     // Initialize logger
     LinkGravityLogger.setLevel(config.logLevel);
 
+    // DIAGNOSTIC: Confirm new SDK is loaded
+    // ignore: avoid_print
+    print('🚀 DEFTEST SDK LOADED - Version 1.2.1');
+
     // Initialize services
     _storage = StorageService();
     _fingerprint = FingerprintService();
