@@ -1,6 +1,8 @@
 name: linkgravity_flutter_sdk
 description: LinkGravity Flutter SDK for deferred deep linking, link generation, and app-to-app attribution. Compatible with FlutterFlow.
-version: 1.1.1
+
+version: 1.2.0
+
 homepage: https://github.com/yourusername/linkgravity_flutter_sdk
 
 environment:

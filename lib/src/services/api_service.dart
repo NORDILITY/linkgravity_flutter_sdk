@@ -511,6 +511,57 @@ class ApiService {
     }
   }
 
+  /// Resolve shortCode to target route
+  /// GET /api/v1/sdk/resolve/:shortCode
+  ///
+  /// Used when Android/iOS intercepts App Link and SDK needs to know where to navigate.
+  /// This is the Branch.io pattern - when the app is already installed, App Links
+  /// intercept ALL paths from the configured domain, so we need to ask the backend
+  /// what route the shortCode should map to.
+  ///
+  /// Parameters:
+  /// - [shortCode]: The short code to resolve (e.g., 'tappick-test')
+  /// - [platform]: Platform name ('android' or 'ios')
+  ///
+  /// Returns a map with:
+  /// - success: true/false
+  /// - route: The target route (e.g., '/hidden?ref=Test13')
+  /// - destination: The original long URL
+  /// - utm: UTM parameters object
+  ///
+  /// Example:
+  /// ```dart
+  /// final result = await api.resolveShortCode('tappick-test', 'android');
+  /// if (result != null && result['success'] == true) {
+  ///   final route = result['route']; // '/hidden?ref=Test13'
+  ///   // Navigate to route
+  /// }
+  /// ```
+  Future<Map<String, dynamic>?> resolveShortCode(
+    String shortCode, {
+    String platform = 'android',
+  }) async {
+    try {
+      LinkGravityLogger.debug('Resolving shortCode: $shortCode (platform: $platform)');
+
+      final response = await _get(
+        '/api/v1/sdk/resolve/$shortCode',
+        queryParams: {'platform': platform},
+      );
+
+      if (response['success'] == true) {
+        LinkGravityLogger.info('ShortCode resolved: $shortCode → ${response['route']}');
+        return response;
+      }
+
+      LinkGravityLogger.warning('Failed to resolve shortCode: $shortCode');
+      return null;
+    } catch (e) {
+      LinkGravityLogger.warning('Error resolving shortCode: $shortCode', e);
+      return null;
+    }
+  }
+
   /// Dispose resources
   void dispose() {
     client.close();

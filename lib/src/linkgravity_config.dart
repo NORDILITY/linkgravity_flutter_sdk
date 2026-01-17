@@ -11,6 +11,21 @@ class LinkGravityConfig {
   /// Enable offline event queue
   final bool enableOfflineQueue;
 
+  /// Enable automatic short code resolution
+  ///
+  /// When enabled, the SDK will automatically attempt to resolve deep link paths
+  /// as short codes via the backend API before matching against registered routes.
+  ///
+  /// This means you don't need custom resolution logic in your app - the SDK
+  /// handles it automatically.
+  ///
+  /// Example: User clicks `http://yourdomain.com/abc123`
+  /// - SDK extracts `abc123` as short code
+  /// - Calls `/api/v1/sdk/resolve/abc123`
+  /// - Gets back `{route: '/product/123'}`
+  /// - Navigates to the resolved route
+  final bool enableAutoResolution;
+
   /// Batch size for analytics events
   final int batchSize;
 
@@ -33,6 +48,7 @@ class LinkGravityConfig {
     this.enableAnalytics = true,
     this.enableDeepLinking = true,
     this.enableOfflineQueue = true,
+    this.enableAutoResolution = false,
     this.batchSize = 20,
     this.batchTimeout = const Duration(seconds: 30),
     this.logLevel = LogLevel.info,
@@ -54,6 +70,7 @@ class LinkGravityConfig {
     bool? enableAnalytics,
     bool? enableDeepLinking,
     bool? enableOfflineQueue,
+    bool? enableAutoResolution,
     int? batchSize,
     Duration? batchTimeout,
     LogLevel? logLevel,
@@ -65,6 +82,7 @@ class LinkGravityConfig {
       enableAnalytics: enableAnalytics ?? this.enableAnalytics,
       enableDeepLinking: enableDeepLinking ?? this.enableDeepLinking,
       enableOfflineQueue: enableOfflineQueue ?? this.enableOfflineQueue,
+      enableAutoResolution: enableAutoResolution ?? this.enableAutoResolution,
       batchSize: batchSize ?? this.batchSize,
       batchTimeout: batchTimeout ?? this.batchTimeout,
       logLevel: logLevel ?? this.logLevel,
@@ -80,6 +98,7 @@ class LinkGravityConfig {
         'enableAnalytics: $enableAnalytics, '
         'enableDeepLinking: $enableDeepLinking, '
         'enableOfflineQueue: $enableOfflineQueue, '
+        'enableAutoResolution: $enableAutoResolution, '
         'batchSize: $batchSize, '
         'batchTimeout: $batchTimeout, '
         'logLevel: $logLevel'

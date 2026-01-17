@@ -105,6 +105,32 @@ class DeepLinkService {
     return deepLink.getParam('linkId') ?? deepLink.getParam('link_id');
   }
 
+  /// Extract shortCode from deep link path
+  ///
+  /// When Android/iOS App Links intercept a link like:
+  /// http://192.168.178.75:8080/tappick-test
+  ///
+  /// The app receives the path: /tappick-test
+  ///
+  /// This method extracts 'tappick-test' from the path.
+  ///
+  /// Returns the shortCode without the leading slash, or null if path is empty/root.
+  String? extractShortCode(DeepLinkData deepLink) {
+    if (deepLink.path.isEmpty || deepLink.path == '/') {
+      return null;
+    }
+
+    // Remove leading slash and return the rest
+    final path = deepLink.path.startsWith('/')
+        ? deepLink.path.substring(1)
+        : deepLink.path;
+
+    // If path contains additional slashes, only take the first segment
+    // e.g., /tappick-test/extra -> tappick-test
+    final segments = path.split('/');
+    return segments.isNotEmpty ? segments[0] : null;
+  }
+
   /// Dispose resources
   void dispose() {
     _subscription?.cancel();

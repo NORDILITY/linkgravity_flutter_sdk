@@ -210,7 +210,18 @@ class StorageService {
   /// Check if this is the first launch after install
   Future<bool> isFirstLaunch() async {
     final prefs = await _preferences;
-    return !prefs.containsKey(_keyFirstLaunch);
+    final hasKey = prefs.containsKey(_keyFirstLaunch);
+    final isFirst = !hasKey;
+
+    LinkGravityLogger.debug(
+      'First launch check: $_keyFirstLaunch exists=$hasKey, isFirstLaunch=$isFirst'
+    );
+
+    // Debug: Log all LinkGravity keys
+    final allKeys = prefs.getKeys().where((key) => key.startsWith('linkgravity_'));
+    LinkGravityLogger.debug('All LinkGravity keys in SharedPreferences: ${allKeys.join(", ")}');
+
+    return isFirst;
   }
 
   /// Mark app as launched (called after first launch)
