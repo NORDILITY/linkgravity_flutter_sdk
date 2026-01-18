@@ -71,8 +71,8 @@ public class LinkGravityFlutterSdkPlugin: NSObject, FlutterPlugin {
   }
 
   private func handleSKAdUpdatePostbackConversionValue(call: FlutterMethodCall, result: @escaping FlutterResult) {
-    guard #available(iOS 15.4, *) else {
-      result(FlutterError(code: "UNAVAILABLE", message: "SKAdNetwork postback requires iOS 15.4+", details: nil))
+    guard #available(iOS 16.1, *) else {
+      result(FlutterError(code: "UNAVAILABLE", message: "SKAdNetwork postback requires iOS 16.1+", details: nil))
       return
     }
 
