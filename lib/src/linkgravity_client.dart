@@ -327,6 +327,51 @@ class LinkGravityClient {
         LinkGravityLogger.debug(
           '🔍 Emitted deep link to stream (may have no listeners yet)',
         );
+
+        // IMMEDIATE NAVIGATION FIX:
+        // Attempt to navigate immediately if context and routes are available.
+        // This handles cases where listeners attach too late or the app structure
+        // makes stream listening unreliable during cold start.
+        // IMMEDIATE NAVIGATION FIX:
+        // Attempt to navigate immediately if context and routes are available.
+        // This handles cases where listeners attach too late.
+        if (_routeContext != null && _registeredRoutes != null) {
+          LinkGravityLogger.info(
+            '🚀 Attempting immediate navigation for deferred link (Routes Mode)...',
+          );
+          _handleRouteMatch(deepLink);
+        } else if (_globalOnNavigate != null) {
+          LinkGravityLogger.info(
+            '🚀 Attempting immediate navigation for deferred link (Callback Mode)...',
+          );
+          // For callback mode, since we don't have the context to resolve again inside the callback easily
+          // (handleDeepLinks logic is closure-bound), we rely on the fact that the deep link
+          // might be already resolved or we just pass the path.
+          // Note: handleDeepLinks usually does resolution.
+          // Since we can't easily invoke that logic here, we will just emit to the stream
+          // AND call the callback if it's "resolved" enough.
+          // BUT: handleDeepLinks logic expects a path string.
+          // AND it does its own resolution.
+          // If we call _globalOnNavigate(path), the user's code executes context.go(path).
+          // If the path is a shortCode (e.g. "test75"), context.go("test75") might fail if not resolved.
+
+          // CRITICAL: We need handleDeepLinks users to benefit from the auto-resolution built into handleDeepLinks.
+          // Since we can't invoke it, we rely on the stream listener being active.
+          // If _globalOnNavigate is NOT null, it means handleDeepLinks WAS CALLED.
+          // If handleDeepLinks was called, the stream listener IS ACTIVE.
+          // So `_deepLink.linkController.add(deepLink)` occurring just above
+          // SHOULD have triggered the listener in handleDeepLinks.
+
+          // If it didn't, it means the stream controller is broadcast vs single, or timing.
+          // We will Log clearly.
+          LinkGravityLogger.info(
+            'ℹ️ handleDeepLinks is active. The stream event emitted above should trigger navigation.',
+          );
+        } else {
+          LinkGravityLogger.debug(
+            '⚠️ Context/Routes/Callback not ready for immediate navigation. Relying on stream/initialLink.',
+          );
+        }
       } else {
         LinkGravityLogger.debug('No deferred deep link found');
       }
@@ -761,6 +806,9 @@ class LinkGravityClient {
   void handleDeepLinks({required Function(String) onNavigate}) {
     _ensureInitialized();
     LinkGravityLogger.info('🔗 Initializing streamlined deep link handler');
+
+    // Store global callback for deferred link handler to use
+    _globalOnNavigate = onNavigate;
 
     // 1. Define the processing logic
     Future<void> processLink(String rawPath) async {
