@@ -20,6 +20,9 @@ class DeepLinkData {
   /// UTM parameters extracted from the deep link (if present)
   final UTMParams? utm;
 
+  /// Whether this link is already fully resolved (avoid further resolution)
+  bool isResolved;
+
   DeepLinkData({
     required this.path,
     required this.params,
@@ -27,12 +30,13 @@ class DeepLinkData {
     this.host,
     this.originalUri,
     this.utm,
+    this.isResolved = false,
   });
 
   /// Create from URI
   ///
   /// Automatically extracts UTM parameters from the URI if present.
-  factory DeepLinkData.fromUri(Uri uri) {
+  factory DeepLinkData.fromUri(Uri uri, {bool isResolved = false}) {
     // Extract UTM parameters from URI
     final utm = UTMParams.fromUri(uri);
 
@@ -43,6 +47,7 @@ class DeepLinkData {
       host: uri.host.isNotEmpty ? uri.host : null,
       originalUri: uri,
       utm: utm,
+      isResolved: isResolved,
     );
   }
 
@@ -51,6 +56,27 @@ class DeepLinkData {
 
   /// Check if parameter exists
   bool hasParam(String key) => params.containsKey(key);
+
+  /// Create a copy with updated values
+  DeepLinkData copyWith({
+    String? path,
+    Map<String, String>? params,
+    String? scheme,
+    String? host,
+    Uri? originalUri,
+    UTMParams? utm,
+    bool? isResolved,
+  }) {
+    return DeepLinkData(
+      path: path ?? this.path,
+      params: params ?? this.params,
+      scheme: scheme ?? this.scheme,
+      host: host ?? this.host,
+      originalUri: originalUri ?? this.originalUri,
+      utm: utm ?? this.utm,
+      isResolved: isResolved ?? this.isResolved,
+    );
+  }
 
   /// Convert to JSON
   Map<String, dynamic> toJson() {
@@ -61,6 +87,7 @@ class DeepLinkData {
       if (host != null) 'host': host,
       if (originalUri != null) 'originalUri': originalUri.toString(),
       if (utm != null) 'utm': utm!.toJson(),
+      'isResolved': isResolved,
     };
   }
 

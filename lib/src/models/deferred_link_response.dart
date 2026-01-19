@@ -36,6 +36,10 @@ class DeferredLinkResponse {
   /// Numeric score for fingerprint matching
   final int? score;
 
+  /// Whether the link is fully resolved to a deep link destination
+  /// If true, the client should not attempt to resolve the short code again.
+  final bool? isResolved;
+
   DeferredLinkResponse({
     required this.success,
     this.alreadyClaimed,
@@ -47,14 +51,10 @@ class DeferredLinkResponse {
     this.matchMethod,
     this.confidence,
     this.score,
+    this.isResolved,
   });
 
   /// Create from JSON (API response)
-  ///
-  /// Handles multiple response formats:
-  /// 1. Wrapped with match object (fingerprint): { success: true, match: { deepLinkUrl, linkId, ... } }
-  /// 2. Wrapped with deepLinkData: { success: true, match: { deepLinkData: {...}, linkId, ... } }
-  /// 3. Flat (referrer): { success: true, deepLinkData: {...}, linkId, ... }
   factory DeferredLinkResponse.fromJson(Map<String, dynamic> json) {
     // Extract data from either wrapped or flat response
     final data = json.containsKey('match') && json['match'] != null
@@ -81,8 +81,9 @@ class DeferredLinkResponse {
     return DeferredLinkResponse(
       success: json['success'] ?? true,
       alreadyClaimed: data['alreadyClaimed'] as bool?,
-      claimedAt:
-          data['claimedAt'] != null ? DateTime.parse(data['claimedAt'] as String) : null,
+      claimedAt: data['claimedAt'] != null
+          ? DateTime.parse(data['claimedAt'] as String)
+          : null,
       deepLinkData: deepLinkData,
       linkId: data['linkId'] as String?,
       shortCode: data['shortCode'] as String?,
@@ -90,22 +91,24 @@ class DeferredLinkResponse {
       matchMethod: data['matchMethod'] as String?,
       confidence: data['confidence'] as String?,
       score: data['score'] as int?,
+      isResolved: data['isResolved'] as bool?,
     );
   }
 
   /// Convert to JSON
   Map<String, dynamic> toJson() => {
-        'success': success,
-        if (alreadyClaimed != null) 'alreadyClaimed': alreadyClaimed,
-        if (claimedAt != null) 'claimedAt': claimedAt!.toIso8601String(),
-        if (deepLinkData != null) 'deepLinkData': deepLinkData,
-        if (linkId != null) 'linkId': linkId,
-        if (shortCode != null) 'shortCode': shortCode,
-        if (platform != null) 'platform': platform,
-        if (matchMethod != null) 'matchMethod': matchMethod,
-        if (confidence != null) 'confidence': confidence,
-        if (score != null) 'score': score,
-      };
+    'success': success,
+    if (alreadyClaimed != null) 'alreadyClaimed': alreadyClaimed,
+    if (claimedAt != null) 'claimedAt': claimedAt!.toIso8601String(),
+    if (deepLinkData != null) 'deepLinkData': deepLinkData,
+    if (linkId != null) 'linkId': linkId,
+    if (shortCode != null) 'shortCode': shortCode,
+    if (platform != null) 'platform': platform,
+    if (matchMethod != null) 'matchMethod': matchMethod,
+    if (confidence != null) 'confidence': confidence,
+    if (score != null) 'score': score,
+    if (isResolved != null) 'isResolved': isResolved,
+  };
 
   /// Get deep link URL from data
   String? get deepLinkUrl => deepLinkData?['deepLinkUrl'] as String?;
@@ -156,7 +159,8 @@ class DeferredLinkResponse {
   }
 
   @override
-  String toString() => 'DeferredLinkResponse('
+  String toString() =>
+      'DeferredLinkResponse('
       'success: $success, '
       'matchMethod: $matchMethod, '
       'linkId: $linkId, '

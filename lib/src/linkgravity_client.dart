@@ -306,9 +306,14 @@ class LinkGravityClient {
         LinkGravityLogger.debug(
           '🔍 Parsing deep link URL: ${match.deepLinkUrl}',
         );
-        final deepLink = _deepLink.parseLink(uri);
+
+        // Pass isResolved flag to DeepLinkData
+        final deepLink = _deepLink
+            .parseLink(uri)
+            .copyWith(isResolved: match.isResolved ?? false);
+
         LinkGravityLogger.debug(
-          '🔍 Parsed deep link - Path: ${deepLink.path}, Params: ${deepLink.params}',
+          '🔍 Parsed deep link - Path: ${deepLink.path}, Params: ${deepLink.params}, isResolved: ${deepLink.isResolved}',
         );
 
         // Set as initial link so it's available via initialDeepLink getter
@@ -371,8 +376,10 @@ class LinkGravityClient {
   Future<LinkGravity> createLink(LinkParams params) async {
     _ensureInitialized();
 
-    LinkGravityLogger.info('Creating link: ${params.longUrl}');
-    final link = await _api.createLink(params);
+    LinkGravityLogger.info('Creating dynamic link: ${params.longUrl}');
+
+    // Use the secure SDK endpoint for creation
+    final link = await _api.createDynamicLink(params);
 
     // Track link created event
     if (config.enableAnalytics) {
@@ -534,6 +541,17 @@ class LinkGravityClient {
   }) async {
     _ensureInitialized();
 
+    // Check if deep link is already explicitly resolved (e.g. from deferred match)
+    if (deepLink.isResolved) {
+      LinkGravityLogger.info(
+        'Deep link is already resolved, skipping lookup: ${deepLink.path}',
+      );
+      // Proceed directly to navigation logic below...
+      // We wrap the path in a "mock" result validation to reuse navigation flow
+      final route = deepLink.path;
+      return _navigateToRoute(context, route);
+    }
+
     // Extract shortCode from path
     final shortCode = _deepLink.extractShortCode(deepLink);
     if (shortCode == null) {
@@ -554,6 +572,12 @@ class LinkGravityClient {
     }
 
     // Navigate to the resolved route
+      return _navigateToRoute(context, route);
+    }
+  }
+
+  /// Helper method to navigate to a route
+  bool _navigateToRoute(BuildContext context, String route) {
     try {
       // Parse the route to extract path and query parameters
       final routeUri = Uri.parse(route.startsWith('/') ? route : '/$route');
