@@ -572,8 +572,7 @@ class LinkGravityClient {
     }
 
     // Navigate to the resolved route
-      return _navigateToRoute(context, route);
-    }
+    return _navigateToRoute(context, route);
   }
 
   /// Helper method to navigate to a route
