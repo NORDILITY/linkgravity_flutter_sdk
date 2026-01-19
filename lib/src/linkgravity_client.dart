@@ -95,6 +95,9 @@ class LinkGravityClient {
   StreamSubscription<DeepLinkData>? _routeStreamSubscription;
   bool _matchPrefix = true;
 
+  // Callback for handleDeepLinks mode
+  Function(String)? _globalOnNavigate;
+
   /// Private constructor
   LinkGravityClient._({
     required this.baseUrl,
