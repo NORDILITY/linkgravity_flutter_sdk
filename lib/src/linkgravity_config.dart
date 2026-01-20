@@ -44,6 +44,12 @@ class LinkGravityConfig {
   /// Custom metadata to include with all events
   final Map<String, dynamic>? globalMetadata;
 
+  /// Debug: Simulate first launch behaviour on every app start
+  ///
+  /// CAUTION: Do not use in production. It forces the SDK to query the backend
+  /// for deferred links on every launch, potentially consuming API limits.
+  final bool debugSimulateFirstLaunch;
+
   LinkGravityConfig({
     this.enableAnalytics = true,
     this.enableDeepLinking = true,
@@ -55,10 +61,13 @@ class LinkGravityConfig {
     this.requestTimeout = const Duration(seconds: 30),
     this.trackLifecycleEvents = true,
     this.globalMetadata,
+    this.debugSimulateFirstLaunch = false,
   }) {
     // Validate configuration
-    assert(batchSize > 0 && batchSize <= 100,
-        'Batch size must be between 1 and 100');
+    assert(
+      batchSize > 0 && batchSize <= 100,
+      'Batch size must be between 1 and 100',
+    );
     assert(
       batchTimeout.inMilliseconds >= 1000,
       'Batch timeout must be at least 1 second',
@@ -77,6 +86,7 @@ class LinkGravityConfig {
     Duration? requestTimeout,
     bool? trackLifecycleEvents,
     Map<String, dynamic>? globalMetadata,
+    bool? debugSimulateFirstLaunch,
   }) {
     return LinkGravityConfig(
       enableAnalytics: enableAnalytics ?? this.enableAnalytics,
@@ -89,6 +99,8 @@ class LinkGravityConfig {
       requestTimeout: requestTimeout ?? this.requestTimeout,
       trackLifecycleEvents: trackLifecycleEvents ?? this.trackLifecycleEvents,
       globalMetadata: globalMetadata ?? this.globalMetadata,
+      debugSimulateFirstLaunch:
+          debugSimulateFirstLaunch ?? this.debugSimulateFirstLaunch,
     );
   }
 
@@ -101,7 +113,8 @@ class LinkGravityConfig {
         'enableAutoResolution: $enableAutoResolution, '
         'batchSize: $batchSize, '
         'batchTimeout: $batchTimeout, '
-        'logLevel: $logLevel'
+        'logLevel: $logLevel, '
+        'debugSimulateFirstLaunch: $debugSimulateFirstLaunch'
         ')';
   }
 }

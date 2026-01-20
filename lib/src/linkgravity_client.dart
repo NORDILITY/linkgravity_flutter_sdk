@@ -245,11 +245,17 @@ class LinkGravityClient {
 
     LinkGravityLogger.info('🔍 isFirstLaunch result: $isFirstLaunch');
 
-    if (!isFirstLaunch) {
+    if (!isFirstLaunch && !config.debugSimulateFirstLaunch) {
       LinkGravityLogger.warning(
         '⚠️ Not first launch, skipping deferred deep link check',
       );
       return;
+    }
+
+    if (config.debugSimulateFirstLaunch) {
+      LinkGravityLogger.warning(
+        '🔍 DEBUG: Simulating first launch (forcing deferred check)',
+      );
     }
 
     LinkGravityLogger.info(
