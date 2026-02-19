@@ -179,6 +179,15 @@ class SDKFingerprint {
   /// Timestamp of fingerprint collection
   final String timestamp;
 
+  /// SDK device ID (stable identifier for install tracking)
+  final String? deviceId;
+
+  /// SDK device fingerprint hash (for install record)
+  final String? deviceFingerprint;
+
+  /// App version string
+  final String? appVersion;
+
   SDKFingerprint({
     required this.platform,
     this.idfv,
@@ -188,6 +197,9 @@ class SDKFingerprint {
     required this.locale,
     required this.userAgent,
     required this.timestamp,
+    this.deviceId,
+    this.deviceFingerprint,
+    this.appVersion,
   });
 
   /// Create from JSON
@@ -201,19 +213,25 @@ class SDKFingerprint {
       locale: json['locale'] as String? ?? 'en-US',
       userAgent: json['userAgent'] as String? ?? '',
       timestamp: json['timestamp'] as String? ?? '',
+      deviceId: json['deviceId'] as String?,
+      deviceFingerprint: json['deviceFingerprint'] as String?,
+      appVersion: json['appVersion'] as String?,
     );
   }
 
   /// Convert to JSON
   Map<String, dynamic> toJson() => {
         'platform': platform,
-        'idfv': idfv,
+        if (idfv != null) 'idfv': idfv,
         'model': model,
         'osVersion': osVersion,
         'timezone': timezone,
         'locale': locale,
         'userAgent': userAgent,
         'timestamp': timestamp,
+        if (deviceId != null) 'deviceId': deviceId,
+        if (deviceFingerprint != null) 'deviceFingerprint': deviceFingerprint,
+        if (appVersion != null) 'appVersion': appVersion,
       };
 
   @override

@@ -264,10 +264,14 @@ class LinkGravityClient {
 
     try {
       // Create deferred deep link service with Android referrer support
+      // Pass device info so backend can create Install record during match
       final deferredService = DeferredDeepLinkService(
         apiService: _api,
         fingerprintService: _fingerprint,
         storageService: _storage,
+        deviceId: _deviceId,
+        deviceFingerprint: _deviceFingerprint,
+        appVersion: _appVersion,
       );
 
       // Try to match using best available method (referrer on Android, fingerprint on iOS)
@@ -289,17 +293,7 @@ class LinkGravityClient {
         LinkGravityLogger.info('   Method: ${match.matchMethod}');
         LinkGravityLogger.info('   URL: ${match.deepLinkUrl}');
 
-        // Track install with attribution
-        await _api.trackInstall(
-          fingerprint: _deviceFingerprint,
-          deviceId: _deviceId,
-          platform: await _fingerprint.getPlatformName(),
-          appVersion: _appVersion,
-          deferredLinkId: match.linkId,
-          matchMethod: match.matchMethod,
-          matchConfidence: match.confidence,
-          matchScore: match.score?.toDouble(),
-        );
+        // Install record is created server-side during /match or /referrer call
 
         // Track deferred link opened event
         await _analytics.trackEvent(EventType.deferredLinkOpened, {
@@ -1427,6 +1421,9 @@ class LinkGravityClient {
         apiService: _api,
         fingerprintService: _fingerprint,
         storageService: _storage,
+        deviceId: _deviceId,
+        deviceFingerprint: _deviceFingerprint,
+        appVersion: _appVersion,
       );
 
       // Use the new method that supports Android referrer
@@ -1442,17 +1439,7 @@ class LinkGravityClient {
         if (match.isAcceptableConfidence()) {
           onFound();
 
-          // Track the install with deferred link data
-          await _api.trackInstall(
-            fingerprint: _deviceFingerprint,
-            deviceId: _deviceId,
-            platform: await _fingerprint.getPlatformName(),
-            appVersion: _appVersion,
-            deferredLinkId: match.linkId,
-            matchMethod: match.matchMethod,
-            matchConfidence: match.confidence,
-            matchScore: match.score?.toDouble(),
-          );
+          // Install record is created server-side during /match or /referrer call
 
           return match.deepLinkUrl;
         } else {
@@ -1472,39 +1459,6 @@ class LinkGravityClient {
       onNotFound?.call();
       return null;
     }
-  }
-
-  /// Track app installation
-  ///
-  /// Call this after app is launched to track the installation.
-  /// Optionally include deferred link matching data.
-  ///
-  /// Parameters:
-  /// - [deferredLinkId]: ID of matched deferred link (if any)
-  /// - [matchMethod]: How the deferred link was matched ('referrer' or 'fingerprint')
-  /// - [matchConfidence]: Confidence level of the match
-  /// - [matchScore]: Numeric score of the match
-  Future<bool> trackInstall({
-    String? deferredLinkId,
-    String? matchMethod,
-    String? matchConfidence,
-    double? matchScore,
-  }) async {
-    if (!_initialized) {
-      LinkGravityLogger.error('LinkGravity not initialized');
-      return false;
-    }
-
-    return _api.trackInstall(
-      fingerprint: _deviceFingerprint,
-      deviceId: _deviceId,
-      platform: await _fingerprint.getPlatformName(),
-      appVersion: _appVersion,
-      deferredLinkId: deferredLinkId,
-      matchMethod: matchMethod,
-      matchConfidence: matchConfidence,
-      matchScore: matchScore,
-    );
   }
 
   /// Reset SDK (clear all data)

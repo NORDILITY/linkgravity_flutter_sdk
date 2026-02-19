@@ -287,23 +287,33 @@ class ApiService {
   // SDK / DEFERRED DEEP LINKING
   // ============================================================================
 
-  /// Get deferred deep link by Android Play Install Referrer token
-  /// GET /api/v1/sdk/deferred-link/referrer/:token
+  /// Match deferred deep link by Android Play Install Referrer token
+  /// POST /api/v1/sdk/deferred-link/referrer
   ///
   /// LINK-004: Deterministic matching for Android using Play Install Referrer API.
   /// This provides 100% accurate attribution for Android installs.
+  /// Backend also creates Install record with full attribution data.
   ///
   /// Returns [DeferredLinkResponse] if a match is found, null otherwise.
   Future<Map<String, dynamic>?> getDeferredLinkByReferrer(
-    String referrerToken,
-  ) async {
+    String referrerToken, {
+    String? deviceId,
+    String? deviceFingerprint,
+    String? appVersion,
+  }) async {
     try {
       LinkGravityLogger.debug(
         'Looking up deferred link by referrer token: ${referrerToken.substring(0, referrerToken.length > 20 ? 20 : referrerToken.length)}...',
       );
 
-      final response = await _get(
-        '/api/v1/sdk/deferred-link/referrer/$referrerToken',
+      final response = await _post(
+        '/api/v1/sdk/deferred-link/referrer',
+        {
+          'token': referrerToken,
+          if (deviceId != null) 'deviceId': deviceId,
+          if (deviceFingerprint != null) 'deviceFingerprint': deviceFingerprint,
+          if (appVersion != null) 'appVersion': appVersion,
+        },
       );
 
       if (response['success'] == true) {
@@ -343,50 +353,6 @@ class ApiService {
     }
   }
 
-  /// Track app install
-  /// POST /api/v1/sdk/install
-  ///
-  /// Tracks app installation with device information and optional deferred link attribution.
-  ///
-  /// Parameters:
-  /// - [fingerprint]: Device fingerprint for attribution
-  /// - [deviceId]: Unique device identifier
-  /// - [platform]: Platform name (android, ios)
-  /// - [appVersion]: App version string
-  /// - [deferredLinkId]: ID of matched deferred link (if any)
-  /// - [matchMethod]: How the deferred link was matched ('referrer' or 'fingerprint')
-  /// - [matchConfidence]: Confidence level of the match
-  /// - [matchScore]: Numeric score of the match
-  Future<bool> trackInstall({
-    String? fingerprint,
-    String? deviceId,
-    String? platform,
-    String? appVersion,
-    String? deferredLinkId,
-    String? matchMethod,
-    String? matchConfidence,
-    double? matchScore,
-  }) async {
-    try {
-      await _post('/api/v1/sdk/install', {
-        'timestamp': DateTime.now().toIso8601String(),
-        if (fingerprint != null) 'fingerprint': fingerprint,
-        if (deviceId != null) 'deviceId': deviceId,
-        if (platform != null) 'platform': platform,
-        if (appVersion != null) 'appVersion': appVersion,
-        if (deferredLinkId != null) 'deferredLinkId': deferredLinkId,
-        if (matchMethod != null) 'matchMethod': matchMethod,
-        if (matchConfidence != null) 'matchConfidence': matchConfidence,
-        if (matchScore != null) 'matchScore': matchScore,
-      });
-
-      LinkGravityLogger.info('Installation tracked successfully');
-      return true;
-    } catch (e) {
-      LinkGravityLogger.error('Error tracking installation: $e', e);
-      return false;
-    }
-  }
 
   /// Track SDK event
   /// POST /api/v1/sdk/events
