@@ -64,5 +64,5 @@ export 'src/services/skadnetwork_service.dart';
 export 'src/services/idfa_service.dart';
 
 // Utilities
-export 'src/utils/logger.dart' show LogLevel;
+export 'src/utils/logger.dart' show LogLevel, LogEntry, LogObserver, LinkGravityLogger;
 export 'src/utils/validators.dart';

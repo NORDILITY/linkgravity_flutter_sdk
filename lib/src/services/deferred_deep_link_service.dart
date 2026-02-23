@@ -31,11 +31,19 @@ class DeferredDeepLinkService {
   final InstallReferrerService _installReferrer;
   final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
 
+  /// Device info for install tracking (set by client, sent to backend)
+  final String? deviceId;
+  final String? deviceFingerprint;
+  final String? appVersion;
+
   DeferredDeepLinkService({
     required this.apiService,
     required this.fingerprintService,
     required this.storageService,
     InstallReferrerService? installReferrerService,
+    this.deviceId,
+    this.deviceFingerprint,
+    this.appVersion,
   }) : _installReferrer = installReferrerService ?? InstallReferrerService(storageService);
 
   /// Match deferred deep link with retry logic and exponential backoff
@@ -141,7 +149,12 @@ class DeferredDeepLinkService {
           LinkGravityLogger.info('Found referrer token, querying server...');
 
           final response =
-              await apiService.getDeferredLinkByReferrer(referrerToken);
+              await apiService.getDeferredLinkByReferrer(
+            referrerToken,
+            deviceId: deviceId,
+            deviceFingerprint: deviceFingerprint,
+            appVersion: appVersion,
+          );
 
           if (response != null && response['success'] == true) {
             LinkGravityLogger.info('✅ Deterministic match found via referrer!');
@@ -281,6 +294,9 @@ class DeferredDeepLinkService {
         locale: locale,
         userAgent: userAgent,
         timestamp: now.toIso8601String(),
+        deviceId: deviceId,
+        deviceFingerprint: deviceFingerprint,
+        appVersion: appVersion,
       );
     } catch (e) {
       LinkGravityLogger.error('Error gathering fingerprint', e);
@@ -294,6 +310,9 @@ class DeferredDeepLinkService {
         locale: 'en-US',
         userAgent: _getUserAgent(),
         timestamp: DateTime.now().toIso8601String(),
+        deviceId: deviceId,
+        deviceFingerprint: deviceFingerprint,
+        appVersion: appVersion,
       );
     }
   }

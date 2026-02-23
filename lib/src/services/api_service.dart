@@ -63,8 +63,10 @@ class ApiService {
   }
 
   /// Make GET request
-  Future<Map<String, dynamic>> _get(String path,
-      {Map<String, String>? queryParams}) async {
+  Future<Map<String, dynamic>> _get(
+    String path, {
+    Map<String, String>? queryParams,
+  }) async {
     try {
       var uri = Uri.parse(_buildUrl(path));
 
@@ -74,8 +76,7 @@ class ApiService {
 
       LinkGravityLogger.debug('GET $uri');
 
-      final response =
-          await client.get(uri, headers: headers).timeout(timeout);
+      final response = await client.get(uri, headers: headers).timeout(timeout);
 
       return _handleResponse(response);
     } catch (e) {
@@ -86,7 +87,9 @@ class ApiService {
 
   /// Make POST request
   Future<Map<String, dynamic>> _post(
-      String path, Map<String, dynamic> body) async {
+    String path,
+    Map<String, dynamic> body,
+  ) async {
     try {
       final uri = Uri.parse(_buildUrl(path));
 
@@ -94,11 +97,7 @@ class ApiService {
       LinkGravityLogger.verbose('Request body: $body');
 
       final response = await client
-          .post(
-            uri,
-            headers: headers,
-            body: jsonEncode(body),
-          )
+          .post(uri, headers: headers, body: jsonEncode(body))
           .timeout(timeout);
 
       return _handleResponse(response);
@@ -110,18 +109,16 @@ class ApiService {
 
   /// Make PUT request
   Future<Map<String, dynamic>> _put(
-      String path, Map<String, dynamic> body) async {
+    String path,
+    Map<String, dynamic> body,
+  ) async {
     try {
       final uri = Uri.parse(_buildUrl(path));
 
       LinkGravityLogger.debug('PUT $uri');
 
       final response = await client
-          .put(
-            uri,
-            headers: headers,
-            body: jsonEncode(body),
-          )
+          .put(uri, headers: headers, body: jsonEncode(body))
           .timeout(timeout);
 
       return _handleResponse(response);
@@ -138,8 +135,9 @@ class ApiService {
 
       LinkGravityLogger.debug('DELETE $uri');
 
-      final response =
-          await client.delete(uri, headers: headers).timeout(timeout);
+      final response = await client
+          .delete(uri, headers: headers)
+          .timeout(timeout);
 
       _handleResponse(response);
     } catch (e) {
@@ -199,7 +197,36 @@ class ApiService {
       return LinkGravity.fromJson(response['data'] as Map<String, dynamic>);
     }
 
+    // Handle nested link object (common API pattern)
+    if (response['link'] != null) {
+      return LinkGravity.fromJson(response['link'] as Map<String, dynamic>);
+    }
+
     throw ApiException('Failed to create link: ${response['message']}');
+  }
+
+  /// Create a dynamic (share) link via SDK using Public API Key
+  /// POST /api/sdk/links
+  Future<LinkGravity> createDynamicLink(LinkParams params) async {
+    if (!params.validate()) {
+      throw ApiException('Invalid link parameters');
+    }
+
+    // Use /api/sdk/links endpoint which supports Public API Key + Rate Limiting
+    final response = await _post('/api/sdk/links', params.toJson());
+
+    // Handle response
+    if (response['link'] != null) {
+      return LinkGravity.fromJson(response['link'] as Map<String, dynamic>);
+    }
+
+    if (response['success'] == true && response['data'] != null) {
+      return LinkGravity.fromJson(response['data'] as Map<String, dynamic>);
+    }
+
+    throw ApiException(
+      'Failed to create dynamic link: ${response['message'] ?? response['error']}',
+    );
   }
 
   /// Get a specific link by ID
@@ -260,21 +287,34 @@ class ApiService {
   // SDK / DEFERRED DEEP LINKING
   // ============================================================================
 
-  /// Get deferred deep link by Android Play Install Referrer token
-  /// GET /api/v1/sdk/deferred-link/referrer/:token
+  /// Match deferred deep link by Android Play Install Referrer token
+  /// POST /api/v1/sdk/deferred-link/referrer
   ///
   /// LINK-004: Deterministic matching for Android using Play Install Referrer API.
   /// This provides 100% accurate attribution for Android installs.
+  /// Backend also creates Install record with full attribution data.
   ///
   /// Returns [DeferredLinkResponse] if a match is found, null otherwise.
   Future<Map<String, dynamic>?> getDeferredLinkByReferrer(
-      String referrerToken) async {
+    String referrerToken, {
+    String? deviceId,
+    String? deviceFingerprint,
+    String? appVersion,
+  }) async {
     try {
       LinkGravityLogger.debug(
-          'Looking up deferred link by referrer token: ${referrerToken.substring(0, referrerToken.length > 20 ? 20 : referrerToken.length)}...');
+        'Looking up deferred link by referrer token: ${referrerToken.substring(0, referrerToken.length > 20 ? 20 : referrerToken.length)}...',
+      );
 
-      final response =
-          await _get('/api/v1/sdk/deferred-link/referrer/$referrerToken');
+      final response = await _post(
+        '/api/v1/sdk/deferred-link/referrer',
+        {
+          'token': referrerToken,
+          if (deviceId != null) 'deviceId': deviceId,
+          if (deviceFingerprint != null) 'deviceFingerprint': deviceFingerprint,
+          if (appVersion != null) 'appVersion': appVersion,
+        },
+      );
 
       if (response['success'] == true) {
         LinkGravityLogger.info('Deferred link found via referrer token');
@@ -302,7 +342,8 @@ class ApiService {
 
       if (response['success'] == true && response['data'] != null) {
         return AttributionData.fromJson(
-            response['data'] as Map<String, dynamic>);
+          response['data'] as Map<String, dynamic>,
+        );
       }
 
       return null;
@@ -312,50 +353,6 @@ class ApiService {
     }
   }
 
-  /// Track app install
-  /// POST /api/v1/sdk/install
-  ///
-  /// Tracks app installation with device information and optional deferred link attribution.
-  ///
-  /// Parameters:
-  /// - [fingerprint]: Device fingerprint for attribution
-  /// - [deviceId]: Unique device identifier
-  /// - [platform]: Platform name (android, ios)
-  /// - [appVersion]: App version string
-  /// - [deferredLinkId]: ID of matched deferred link (if any)
-  /// - [matchMethod]: How the deferred link was matched ('referrer' or 'fingerprint')
-  /// - [matchConfidence]: Confidence level of the match
-  /// - [matchScore]: Numeric score of the match
-  Future<bool> trackInstall({
-    String? fingerprint,
-    String? deviceId,
-    String? platform,
-    String? appVersion,
-    String? deferredLinkId,
-    String? matchMethod,
-    String? matchConfidence,
-    double? matchScore,
-  }) async {
-    try {
-      await _post('/api/v1/sdk/install', {
-        'timestamp': DateTime.now().toIso8601String(),
-        if (fingerprint != null) 'fingerprint': fingerprint,
-        if (deviceId != null) 'deviceId': deviceId,
-        if (platform != null) 'platform': platform,
-        if (appVersion != null) 'appVersion': appVersion,
-        if (deferredLinkId != null) 'deferredLinkId': deferredLinkId,
-        if (matchMethod != null) 'matchMethod': matchMethod,
-        if (matchConfidence != null) 'matchConfidence': matchConfidence,
-        if (matchScore != null) 'matchScore': matchScore,
-      });
-
-      LinkGravityLogger.info('Installation tracked successfully');
-      return true;
-    } catch (e) {
-      LinkGravityLogger.error('Error tracking installation: $e', e);
-      return false;
-    }
-  }
 
   /// Track SDK event
   /// POST /api/v1/sdk/events
@@ -407,29 +404,13 @@ class ApiService {
       });
 
       LinkGravityLogger.info(
-          'Conversion tracked: $type${linkId != null ? ' for $linkId' : ''}');
+        'Conversion tracked: $type${linkId != null ? ' for $linkId' : ''}',
+      );
       return true;
     } catch (e) {
       LinkGravityLogger.error('Error tracking conversion: $e', e);
       return false;
     }
-  }
-
-  /// Get SDK configuration
-  /// GET /api/v1/sdk/config
-  ///
-  /// Returns SDK configuration from backend including:
-  /// - version: Config version number
-  /// - deferredLinkTimeout: Timeout for deferred link matching in ms
-  /// - enableAnalytics: Whether analytics is enabled
-  Future<Map<String, dynamic>> getSdkConfig() async {
-    final response = await _get('/api/v1/sdk/config');
-
-    if (response['success'] == true && response['config'] != null) {
-      return response['config'] as Map<String, dynamic>;
-    }
-
-    return {};
   }
 
   // ============================================================================
@@ -447,12 +428,16 @@ class ApiService {
 
     // Transform events to match backend schema
     // Backend uses 'type' instead of 'name' and 'properties' instead of 'data'
-    final eventsJson = events.map((e) => {
-      'type': e.name,
-      'properties': e.data,
-      'timestamp': e.timestamp.toIso8601String(),
-      if (e.sessionId != null) 'sessionId': e.sessionId,
-    }).toList();
+    final eventsJson = events
+        .map(
+          (e) => {
+            'type': e.name,
+            'properties': e.data,
+            'timestamp': e.timestamp.toIso8601String(),
+            if (e.sessionId != null) 'sessionId': e.sessionId,
+          },
+        )
+        .toList();
 
     // Extract common fields from first event (all events in batch share same fingerprint/session)
     final firstEvent = events.first;
@@ -487,14 +472,14 @@ class ApiService {
   // ============================================================================
 
   /// Match deferred deep link with device fingerprint
-  /// POST /api/v1/sdk/match-link
-  /// Requires public API key authentication
+  /// POST /api/v1/sdk/match
+  /// Public endpoint (no authentication required)
   Future<Map<String, dynamic>?> matchLink(dynamic fingerprint) async {
     try {
       LinkGravityLogger.debug('Matching deferred deep link with fingerprint');
 
       final response = await _post(
-        '/api/v1/sdk/match-link',
+        '/api/v1/sdk/match',
         fingerprint is Map ? fingerprint : fingerprint.toJson(),
       );
 
@@ -542,7 +527,9 @@ class ApiService {
     String platform = 'android',
   }) async {
     try {
-      LinkGravityLogger.debug('Resolving shortCode: $shortCode (platform: $platform)');
+      LinkGravityLogger.debug(
+        'Resolving shortCode: $shortCode (platform: $platform)',
+      );
 
       final response = await _get(
         '/api/v1/sdk/resolve/$shortCode',
@@ -550,7 +537,9 @@ class ApiService {
       );
 
       if (response['success'] == true) {
-        LinkGravityLogger.info('ShortCode resolved: $shortCode → ${response['route']}');
+        LinkGravityLogger.info(
+          'ShortCode resolved: $shortCode → ${response['route']}',
+        );
         return response;
       }
 

@@ -51,7 +51,7 @@ class SKAdNetworkService {
     ///   - coarseValue: Coarse conversion value (.low, .medium, .high)
     ///   - lockWindow: Whether to lock the conversion window
     ///   - completion: Completion handler with optional error
-    @available(iOS 15.4, *)
+    @available(iOS 16.1, *)
     func updatePostbackConversionValue(
         _ fineValue: Int,
         coarseValue: SKAdNetwork.CoarseConversionValue,
@@ -143,7 +143,7 @@ class SKAdNetworkService {
 
 // MARK: - Coarse Conversion Value Extension
 
-@available(iOS 15.4, *)
+@available(iOS 16.1, *)
 extension SKAdNetwork.CoarseConversionValue {
     /// Create from string representation
     static func from(string: String) -> SKAdNetwork.CoarseConversionValue {
