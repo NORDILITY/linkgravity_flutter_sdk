@@ -31,9 +31,11 @@ void main() async {
     apiKey: 'your-api-key',
   );
 
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 ```
+
+get the `baseUrl` and `apiKey` from your [LinkGravity](https://dev.linkgravity.io/) project.
 
 ### 2. Handle Deep Links
 
