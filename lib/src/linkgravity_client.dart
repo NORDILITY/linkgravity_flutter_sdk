@@ -30,7 +30,8 @@ import 'utils/logger.dart';
 /// // Initialize SDK
 /// final linkGravity = await LinkGravityClient.initialize(
 ///   baseUrl: 'https://api.linkgravity.io',
-///   apiKey: 'your-api-key',
+///   iosApiKey: 'your-ios-api-key',
+///   androidApiKey: 'your-android-api-key',
 /// );
 ///
 /// // Create a link
@@ -140,13 +141,29 @@ class LinkGravityClient {
   ///
   /// Parameters:
   /// - [baseUrl]: Base URL of your LinkGravity backend (e.g., 'https://api.linkgravity.io')
-  /// - [apiKey]: Your API key (optional for some read-only operations)
+  /// - [apiKey]: Universal API key used on all platforms (optional)
+  /// - [iosApiKey]: iOS-specific API key (takes priority over [apiKey] on iOS)
+  /// - [androidApiKey]: Android-specific API key (takes priority over [apiKey] on Android)
   /// - [config]: SDK configuration (optional)
+  ///
+  /// You can provide platform-specific keys, a universal key, or both.
+  /// Platform-specific keys take priority over the universal [apiKey].
+  ///
+  /// Example with platform-specific keys:
+  /// ```dart
+  /// await LinkGravityClient.initialize(
+  ///   baseUrl: 'https://api.linkgravity.io',
+  ///   iosApiKey: 'your-ios-api-key',
+  ///   androidApiKey: 'your-android-api-key',
+  /// );
+  /// ```
   ///
   /// Returns initialized [LinkGravityClient] instance
   static Future<LinkGravityClient> initialize({
     required String baseUrl,
     String? apiKey,
+    String? iosApiKey,
+    String? androidApiKey,
     LinkGravityConfig? config,
   }) async {
     if (_instance != null) {
@@ -158,9 +175,19 @@ class LinkGravityClient {
 
     LinkGravityLogger.info('Initializing LinkGravity SDK...');
 
+    // Resolve platform-specific API key
+    String? resolvedApiKey = apiKey;
+    if (Platform.isIOS && iosApiKey != null) {
+      resolvedApiKey = iosApiKey;
+      LinkGravityLogger.debug('Using iOS-specific API key');
+    } else if (Platform.isAndroid && androidApiKey != null) {
+      resolvedApiKey = androidApiKey;
+      LinkGravityLogger.debug('Using Android-specific API key');
+    }
+
     _instance = LinkGravityClient._(
       baseUrl: baseUrl,
-      apiKey: apiKey,
+      apiKey: resolvedApiKey,
       config: config ?? LinkGravityConfig(),
     );
 

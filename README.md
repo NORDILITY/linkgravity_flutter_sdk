@@ -28,14 +28,15 @@ void main() async {
 
   await LinkGravityClient.initialize(
     baseUrl: 'https://api.linkgravity.io',
-    apiKey: 'your-api-key',
+    iosApiKey: 'your-ios-api-key',
+    androidApiKey: 'your-android-api-key',
   );
 
   runApp(const MyApp());
 }
 ```
 
-get the `baseUrl` and `apiKey` from your [LinkGravity](https://dev.linkgravity.io/) project.
+get the `baseUrl` and platform-specific API keys from your [LinkGravity](https://dev.linkgravity.io/) project. You can also use a single universal `apiKey` instead of platform-specific keys.
 
 ### 2. Handle Deep Links
 
@@ -142,7 +143,8 @@ Deep links require platform-specific configuration:
 ```dart
 await LinkGravityClient.initialize(
   baseUrl: 'https://api.linkgravity.io',
-  apiKey: 'your-api-key',
+  iosApiKey: 'your-ios-api-key',
+  androidApiKey: 'your-android-api-key',
   config: LinkGravityConfig(
     enableDeepLinking: true,          // Deep link handling (default: true)
     enableAnalytics: true,            // Event tracking (default: true)
