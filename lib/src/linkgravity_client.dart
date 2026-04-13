@@ -107,10 +107,6 @@ class LinkGravityClient {
     // Initialize logger
     LinkGravityLogger.setLevel(config.logLevel);
 
-    // DIAGNOSTIC: Confirm new SDK is loaded
-    // ignore: avoid_print
-    print('🚀 DEFTEST SDK LOADED - Version 1.2.1');
-
     // Initialize services
     _storage = StorageService();
     _fingerprint = FingerprintService();
@@ -132,6 +128,39 @@ class LinkGravityClient {
     );
     _skadnetwork = SKAdNetworkService(apiService: _api);
     _idfa = IDFAService();
+  }
+
+  /// Creates an instance for testing with injectable dependencies.
+  ///
+  /// Bypasses platform-dependent initialization (PackageInfo, SharedPreferences)
+  /// and allows direct injection of service instances.
+  @visibleForTesting
+  LinkGravityClient.forTesting({
+    required this.baseUrl,
+    this.apiKey,
+    required this.config,
+    required ApiService api,
+    required DeepLinkService deepLink,
+    required FingerprintService fingerprint,
+    required StorageService storage,
+    required AnalyticsService analytics,
+  }) {
+    LinkGravityLogger.setLevel(config.logLevel);
+    _api = api;
+    _deepLink = deepLink;
+    _fingerprint = fingerprint;
+    _storage = storage;
+    _installReferrer = InstallReferrerService(storage);
+    _analytics = analytics;
+    _skadnetwork = SKAdNetworkService(apiService: api);
+    _idfa = IDFAService();
+    _initialized = true;
+  }
+
+  /// Resets the singleton instance. Only for use in tests.
+  @visibleForTesting
+  static void resetForTesting() {
+    _instance = null;
   }
 
   /// Initialize the LinkGravity SDK

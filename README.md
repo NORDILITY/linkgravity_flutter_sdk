@@ -18,7 +18,15 @@ flutter pub get
 
 ## Quick Start
 
-### 1. Initialize
+### Prerequisite
+
+Your app needs to be created in android console and or the apple app store (they do not have to be released yet), to get keys for the respective OS to verify the links.
+ios see https://docs.flutter.dev/cookbook/navigation/set-up-universal-links
+android see https://docs.flutter.dev/cookbook/navigation/set-up-app-links
+
+workaround android, app settings -> open by default -> add link -> choose the link gravity link schema
+
+### 1. Initialize 
 
 ```dart
 import 'package:linkgravity_flutter_sdk/linkgravity_flutter_sdk.dart';
@@ -36,13 +44,13 @@ void main() async {
 }
 ```
 
-get the `baseUrl` and platform-specific API keys from your [LinkGravity](https://dev.linkgravity.io/) project. You can also use a single universal `apiKey` instead of platform-specific keys.
+get the `baseUrl` and platform-specific API keys from your [LinkGravity](https://dev.linkgravity.io/) project. You can also use a single universal `apiKey` instead of platform-specific keys (if you target only one mobile OS).
 
 ### 2. Handle Deep Links
 
 The SDK resolves short codes automatically. Pick the approach that fits your app:
 
-**Option A: Simple callback** (recommended for most apps)
+**Option A: Simple callback** (using [go_router](https://pub.dev/packages/go_router), recommended for most apps)
 
 ```dart
 // In your home page's initState or equivalent
@@ -54,6 +62,20 @@ LinkGravityClient.instance.handleDeepLinks(
 );
 ```
 
+package name can be found in build.gradle.ktr for kotlin or build.grade for java under applicationId.
+for android add 
+```xml
+<intent-filter android:autoVerify="true">
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="http" android:host="<replace_with_your_sub_domain_in_linkgravity>.links.linkgravity.io" />
+    <data android:scheme="https" />
+</intent-filter>
+
+To test deep links in andoird emulator without having sha256 fingerprint of you apk, configure your app in the emulator to accept external links
+```
+<!-- Tested until here -->
 **Option B: Route map** (when you need per-route logic)
 
 ```dart
