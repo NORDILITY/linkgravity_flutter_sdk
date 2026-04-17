@@ -60,16 +60,15 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _setupDeepLinkListener() {
-    // Listen for deep links
-    LinkGravityClient.instance.onDeepLink.listen((deepLink) {
+    // Listen for deep links — each event is the raw link string from the OS.
+    LinkGravityClient.instance.onDeepLink.listen((link) {
       setState(() {
-        _deepLinks.add('${deepLink.scheme}://${deepLink.host}${deepLink.path}');
+        _deepLinks.add(link);
       });
 
-      // Show snackbar
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deep link received: ${deepLink.path}')),
+          SnackBar(content: Text('Deep link received: $link')),
         );
       }
     });

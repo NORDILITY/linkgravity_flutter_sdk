@@ -51,11 +51,9 @@ export 'src/models/link.dart';
 export 'src/models/link_params.dart';
 export 'src/models/attribution.dart';
 export 'src/models/analytics_event.dart';
-export 'src/models/deep_link_data.dart';
 export 'src/models/deep_link_match.dart';
 export 'src/models/deferred_link_response.dart';
 export 'src/models/utm_params.dart';
-export 'src/models/route_action.dart';
 
 // Services (for advanced usage)
 export 'src/services/api_service.dart' show ApiException;

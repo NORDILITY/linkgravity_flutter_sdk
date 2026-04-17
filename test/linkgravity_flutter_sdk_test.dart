@@ -50,27 +50,6 @@ void main() {
       expect(invalidShortCode.validate(), false);
     });
 
-    test('DeepLinkData fromUri with custom scheme', () {
-      // For custom schemes, the host becomes part of the path:
-      // linkgravity://product/123 → host="product", path="/123" → resolved path="/product/123"
-      final uri = Uri.parse('linkgravity://product/123?ref=campaign');
-      final deepLink = DeepLinkData.fromUri(uri);
-
-      expect(deepLink.scheme, 'linkgravity');
-      expect(deepLink.path, '/product/123');
-      expect(deepLink.host, isNull);
-      expect(deepLink.params['ref'], 'campaign');
-    });
-
-    test('DeepLinkData fromUri with http scheme preserves host', () {
-      final uri = Uri.parse('https://example.com/product/123?ref=campaign');
-      final deepLink = DeepLinkData.fromUri(uri);
-
-      expect(deepLink.scheme, 'https');
-      expect(deepLink.path, '/product/123');
-      expect(deepLink.host, 'example.com');
-      expect(deepLink.params['ref'], 'campaign');
-    });
   });
 
   group('Validators', () {

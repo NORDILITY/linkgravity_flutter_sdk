@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:linkgravity_flutter_sdk/src/linkgravity_client.dart';
 import 'package:linkgravity_flutter_sdk/src/linkgravity_config.dart';
-import 'package:linkgravity_flutter_sdk/src/models/deep_link_data.dart';
 import 'package:linkgravity_flutter_sdk/src/services/api_service.dart';
 import 'package:linkgravity_flutter_sdk/src/services/deep_link_service.dart';
 import 'package:linkgravity_flutter_sdk/src/services/fingerprint_service.dart';
@@ -23,16 +22,61 @@ void main() {
     LinkGravityClient.resetForTesting();
     deepLinkService = DeepLinkService();
 
+    // New resolve payload shape: `route` is a plain path (e.g. "/details"),
+    // NOT a full URI like "schema://schema/details". Destination + UTM are
+    // returned as sibling fields.
     final mockHttpClient = MockClient((request) async {
       if (request.url.path.contains('/api/v1/sdk/resolve/details')) {
         return http.Response(
-          jsonEncode({'success': true, 'route': '/details'}),
+          jsonEncode({
+            'success': true,
+            'shortCode': 'details',
+            'route': '/details',
+            'destination': 'https://example.com',
+            'utm': {
+              'campaign': null,
+              'source': null,
+              'medium': null,
+              'content': null,
+              'term': null,
+            },
+          }),
           200,
         );
       }
       if (request.url.path.contains('/api/v1/sdk/resolve/child')) {
         return http.Response(
-          jsonEncode({'success': true, 'route': '/parent/child'}),
+          jsonEncode({
+            'success': true,
+            'shortCode': 'child',
+            'route': '/parent/child',
+            'destination': 'https://example.com/parent/child',
+            'utm': {
+              'campaign': null,
+              'source': null,
+              'medium': null,
+              'content': null,
+              'term': null,
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path.contains('/api/v1/sdk/resolve/promo')) {
+        return http.Response(
+          jsonEncode({
+            'success': true,
+            'shortCode': 'promo',
+            'route': '/promo',
+            'destination': 'https://example.com/promo',
+            'utm': {
+              'campaign': 'spring_sale',
+              'source': 'email',
+              'medium': 'newsletter',
+              'content': null,
+              'term': null,
+            },
+          }),
           200,
         );
       }
@@ -74,7 +118,7 @@ void main() {
   });
 
   group('handleDeepLinks', () {
-    test('myapp://details resolves to /details', () async {
+    test('/details resolves to /details', () async {
       final completer = Completer<String>();
 
       client.handleDeepLinks(
@@ -83,10 +127,7 @@ void main() {
         },
       );
 
-      // myapp://details → custom scheme parsing gives path="/details"
-      // processLink extracts shortCode "details", API resolves to /details
-      final uri = Uri.parse('myapp://details');
-      deepLinkService.linkController.add(DeepLinkData.fromUri(uri));
+      client.processDeepLink('/details');
 
       final navigatedPath = await completer.future.timeout(
         const Duration(seconds: 5),
@@ -103,9 +144,9 @@ void main() {
         },
       );
 
-      // Use an unknown shortCode that the mock API won't resolve
-      final uri = Uri.parse('myapp://unknown-page');
-      deepLinkService.linkController.add(DeepLinkData.fromUri(uri));
+      // Unknown shortcode — mock returns 404, SDK falls back to using the
+      // incoming path verbatim.
+      client.processDeepLink('/unknown-page');
 
       final navigatedPath = await completer.future.timeout(
         const Duration(seconds: 5),
@@ -113,7 +154,7 @@ void main() {
       expect(navigatedPath, '/unknown-page');
     });
 
-    test('myapp://parent/child resolves to /parent/child', () async {
+    test('/parent/child resolves to /parent/child', () async {
       final completer = Completer<String>();
 
       client.handleDeepLinks(
@@ -122,10 +163,7 @@ void main() {
         },
       );
 
-      // myapp://parent/child → custom scheme parsing gives path="/parent/child"
-      // processLink extracts shortCode "child" (last segment), API resolves to /parent/child
-      final uri = Uri.parse('myapp://here_must_be_parent_TODO/child');
-      deepLinkService.linkController.add(DeepLinkData.fromUri(uri));
+      client.processDeepLink('/parent/child');
 
       final navigatedPath = await completer.future.timeout(
         const Duration(seconds: 5),
@@ -142,10 +180,7 @@ void main() {
         },
       );
 
-      // https://example.com/details → http scheme keeps host, path="/details"
-      // processLink extracts shortCode "details", API resolves to /details
-      final uri = Uri.parse('https://example.com/details');
-      deepLinkService.linkController.add(DeepLinkData.fromUri(uri));
+      client.processDeepLink('https://example.com/details');
 
       final navigatedPath = await completer.future.timeout(
         const Duration(seconds: 5),
@@ -195,19 +230,62 @@ void main() {
         },
       );
 
-      // Simulate a link that was already resolved (e.g. from deferred deep link)
-      deepLinkService.linkController.add(DeepLinkData(
-        path: '/details',
-        params: {},
-        scheme: 'myapp',
-        isResolved: true,
-      ));
+      // Pre-resolved link (e.g. from deferred deep link match) bypasses
+      // the /resolve call and goes straight to navigation.
+      trackedClient.processDeepLink('/details', isResolved: true);
 
       final navigatedPath = await completer.future.timeout(
         const Duration(seconds: 5),
       );
       expect(navigatedPath, '/details');
       expect(apiCallCount, 0, reason: 'No API call should be made for already-resolved links');
+    });
+
+    test('incoming query params are merged onto the resolved plain-path route',
+        () async {
+      final completer = Completer<String>();
+
+      client.handleDeepLinks(
+        onNavigate: (path) {
+          if (!completer.isCompleted) completer.complete(path);
+        },
+      );
+
+      // Incoming link carries extra query params. Backend returns route="/details"
+      // (plain path, no query string). The SDK must append the incoming params
+      // to the resolved route verbatim.
+      client.processDeepLink('https://example.com/details?promo=summer&ref=abc');
+
+      final navigatedPath = await completer.future.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(navigatedPath, startsWith('/details?'));
+      final navigatedUri = Uri.parse(navigatedPath);
+      expect(navigatedUri.path, '/details');
+      expect(navigatedUri.queryParameters['promo'], 'summer');
+      expect(navigatedUri.queryParameters['ref'], 'abc');
+    });
+
+    test('UTM from resolve response is applied via setUTM', () async {
+      final completer = Completer<String>();
+
+      client.handleDeepLinks(
+        onNavigate: (path) {
+          if (!completer.isCompleted) completer.complete(path);
+        },
+      );
+
+      client.processDeepLink('https://example.com/promo');
+
+      await completer.future.timeout(const Duration(seconds: 5));
+
+      // UTM sibling field in the resolve response should flow to the client's
+      // current UTM attribution.
+      final utm = client.currentUTM;
+      expect(utm, isNotNull);
+      expect(utm!.campaign, 'spring_sale');
+      expect(utm.source, 'email');
+      expect(utm.medium, 'newsletter');
     });
   });
 }
