@@ -6,11 +6,11 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:linkgravity_flutter_sdk/src/linkgravity_client.dart';
 import 'package:linkgravity_flutter_sdk/src/linkgravity_config.dart';
+import 'package:linkgravity_flutter_sdk/src/services/analytics_service.dart';
 import 'package:linkgravity_flutter_sdk/src/services/api_service.dart';
 import 'package:linkgravity_flutter_sdk/src/services/deep_link_service.dart';
 import 'package:linkgravity_flutter_sdk/src/services/fingerprint_service.dart';
 import 'package:linkgravity_flutter_sdk/src/services/storage_service.dart';
-import 'package:linkgravity_flutter_sdk/src/services/analytics_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -238,7 +238,8 @@ void main() {
         const Duration(seconds: 5),
       );
       expect(navigatedPath, '/details');
-      expect(apiCallCount, 0, reason: 'No API call should be made for already-resolved links');
+      expect(apiCallCount, 0,
+          reason: 'No API call should be made for already-resolved links');
     });
 
     test('incoming query params are merged onto the resolved plain-path route',
@@ -254,7 +255,8 @@ void main() {
       // Incoming link carries extra query params. Backend returns route="/details"
       // (plain path, no query string). The SDK must append the incoming params
       // to the resolved route verbatim.
-      client.processDeepLink('https://example.com/details?promo=summer&ref=abc');
+      client
+          .processDeepLink('https://example.com/details?promo=summer&ref=abc');
 
       final navigatedPath = await completer.future.timeout(
         const Duration(seconds: 5),
