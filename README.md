@@ -20,11 +20,11 @@ flutter pub get
 
 ### Prerequisite
 
-Your app needs to be created in android console and or the apple app store (they do not have to be released yet), to get keys for the respective OS to verify the links.
-ios see https://docs.flutter.dev/cookbook/navigation/set-up-universal-links
-android see https://docs.flutter.dev/cookbook/navigation/set-up-app-links
+Your app needs to be created in Android Console and or the apple app store (they do not have to be released yet), to get keys for the respective OS to verify the links.
+iOS see [setup universal links](https://docs.flutter.dev/cookbook/navigation/set-up-universal-links)
+Android see [setup app links](https://docs.flutter.dev/cookbook/navigation/set-up-app-links).
 
-workaround android, app settings -> open by default -> add link -> choose the link gravity link schema
+For Android you do not need to have the App in Console, you can test with this workaroung: Goto app settings of your App -> open by default -> add link -> choose the link gravity link schema.
 
 ### 1. Initialize 
 
@@ -72,28 +72,8 @@ for android add
     <data android:scheme="http" android:host="<replace_with_your_sub_domain_in_linkgravity>.links.linkgravity.io" />
     <data android:scheme="https" />
 </intent-filter>
-
+```
 To test deep links in andoird emulator without having sha256 fingerprint of you apk, configure your app in the emulator to accept external links
-```
-<!-- Tested until here -->
-**Option B: Route map** (when you need per-route logic)
-
-```dart
-LinkGravityClient.instance.registerRoutes(
-  context: context,
-  routes: {
-    '/product': (deepLink) => RouteAction((ctx, data) {
-      final id = data.getParam('id');
-      Navigator.of(ctx).pushNamed('/product', arguments: {'id': id});
-    }),
-    '/profile': (deepLink) => RouteAction((ctx, data) {
-      Navigator.of(ctx).pushNamed('/profile');
-    }),
-  },
-);
-```
-
-Both options handle cold starts (app launched from a link) and warm starts (link opened while app is running) automatically.
 
 ### 3. Deferred Deep Linking
 
@@ -102,16 +82,8 @@ Deferred deep linking works **automatically on first app launch** — no extra c
 - **Android**: Uses the Play Install Referrer API for 100% deterministic matching, with fingerprint fallback
 - **iOS**: Uses fingerprint matching (~85-90% accuracy)
 
-The matched deep link flows through the same `handleDeepLinks` or `registerRoutes` callback you set up above.
-
-If you need manual control:
-
-```dart
-final deepLinkUrl = await LinkGravityClient.instance.handleDeferredDeepLink(
-  onFound: () => print('Deferred deep link found!'),
-  onNotFound: () => print('No deferred deep link'),
-);
-```
+The matched deep link flows through the same `handleDeepLinks` callback you set up above.
+<!-- Tested until here -->
 
 ## Create & Manage Links
 
@@ -200,7 +172,6 @@ await LinkGravityClient.initialize(
 | `registerRoutes({context, routes})` | Register route patterns for navigation |
 | `onDeepLink` | Stream of incoming deep links |
 | `initialDeepLink` | Deep link that launched the app (cold start) |
-| `handleDeferredDeepLink({onFound, onNotFound})` | Manually trigger deferred deep link matching |
 | `resolveShortCode(String)` | Resolve a short code to its target route |
 
 ### Analytics & Attribution

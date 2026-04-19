@@ -47,8 +47,6 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String? _createdLink;
   String? _attribution;
-  String? _deferredDeepLink;
-  String? _matchMethod;
   final List<String> _deepLinks = [];
 
   @override
@@ -56,7 +54,6 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
     _setupDeepLinkListener();
     _loadAttribution();
-    _checkDeferredDeepLink();
   }
 
   void _setupDeepLinkListener() {
@@ -82,26 +79,6 @@ class _MyHomePageState extends State<MyHomePage> {
             'Campaign: ${attribution.campaignId ?? "None"}\n'
             'Source: ${attribution.utmSource ?? "None"}\n'
             'Is Deferred: ${attribution.isDeferred}';
-      });
-    }
-  }
-
-  /// Check for deferred deep link manually
-  /// Note: The SDK automatically handles this on first launch, but you can
-  /// also check manually using handleDeferredDeepLink()
-  Future<void> _checkDeferredDeepLink() async {
-    final deepLinkUrl = await LinkGravityClient.instance.handleDeferredDeepLink(
-      onFound: () {
-        debugPrint('Deferred deep link found!');
-      },
-      onNotFound: () {
-        debugPrint('No deferred deep link');
-      },
-    );
-
-    if (deepLinkUrl != null && mounted) {
-      setState(() {
-        _deferredDeepLink = deepLinkUrl;
       });
     }
   }
@@ -243,16 +220,10 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    if (_deferredDeepLink != null) ...[
-                      Text('Found: $_deferredDeepLink'),
-                      if (_matchMethod != null)
-                        Text('Match Method: $_matchMethod'),
-                    ] else
-                      const Text('No deferred deep link found'),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: _checkDeferredDeepLink,
-                      child: const Text('Check Again'),
+                    const Text(
+                      'The SDK automatically checks for a deferred deep link '
+                      'on first launch. Matches are delivered through the same '
+                      'onDeepLink stream as regular deep links.',
                     ),
                   ],
                 ),

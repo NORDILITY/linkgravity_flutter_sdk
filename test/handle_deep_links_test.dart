@@ -290,4 +290,82 @@ void main() {
       expect(utm.medium, 'newsletter');
     });
   });
+
+  group('deferred deep link flow', () {
+    // A deferred match (from install-referrer on Android, fingerprint on iOS)
+    // is delivered by the internal _handleDeferredDeepLink() by pushing the
+    // URL into the DeepLinkService's stream controllers. handleDeepLinks
+    // subscribes to both streams, so the match should reach onNavigate
+    // without the caller wiring up a separate deferred callback.
+
+    test('pre-resolved deferred match reaches onNavigate without API call',
+        () async {
+      final completer = Completer<String>();
+      var apiCallCount = 0;
+
+      final trackedHttpClient = MockClient((request) async {
+        apiCallCount++;
+        return http.Response(jsonEncode({'success': false}), 404);
+      });
+
+      final trackedApiService = ApiService(
+        baseUrl: 'https://test.linkgravity.io',
+        apiKey: 'test-key',
+        client: trackedHttpClient,
+      );
+
+      final storage = StorageService();
+      final trackedClient = LinkGravityClient.forTesting(
+        baseUrl: 'https://test.linkgravity.io',
+        apiKey: 'test-key',
+        config: LinkGravityConfig(enableAnalytics: false),
+        api: trackedApiService,
+        deepLink: deepLinkService,
+        fingerprint: FingerprintService(),
+        storage: storage,
+        analytics: AnalyticsService(
+          api: trackedApiService,
+          storage: storage,
+          enabled: false,
+          offlineQueueEnabled: false,
+        ),
+      );
+
+      trackedClient.handleDeepLinks(
+        onNavigate: (path) {
+          if (!completer.isCompleted) completer.complete(path);
+        },
+      );
+
+      // Simulate what _handleDeferredDeepLink does when the backend returns
+      // an already-resolved route: push into the resolved stream.
+      deepLinkService.resolvedLinkController.add('/details');
+
+      final navigatedPath =
+          await completer.future.timeout(const Duration(seconds: 5));
+      expect(navigatedPath, '/details');
+      expect(apiCallCount, 0,
+          reason: 'Pre-resolved deferred matches must not hit /resolve');
+    });
+
+    test('unresolved deferred match is resolved via API and navigated',
+        () async {
+      final completer = Completer<String>();
+
+      client.handleDeepLinks(
+        onNavigate: (path) {
+          if (!completer.isCompleted) completer.complete(path);
+        },
+      );
+
+      // Simulate a deferred match that still needs resolution (e.g. backend
+      // returned only the shortcode). handleDeepLinks should resolve it and
+      // navigate to the backend-provided route.
+      deepLinkService.linkController.add('/details');
+
+      final navigatedPath =
+          await completer.future.timeout(const Duration(seconds: 5));
+      expect(navigatedPath, '/details');
+    });
+  });
 }
