@@ -52,23 +52,26 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    _setupDeepLinkListener();
+    _setupDeepLinkHandling();
     _loadAttribution();
   }
 
-  void _setupDeepLinkListener() {
-    // Listen for deep links — each event is the raw link string from the OS.
-    LinkGravityClient.instance.onDeepLink.listen((link) {
-      setState(() {
-        _deepLinks.add(link);
-      });
+  void _setupDeepLinkHandling() {
+    // Use the unified callback so regular and deferred deep links are handled
+    // through the same entry point.
+    LinkGravityClient.instance.handleDeepLinks(
+      onNavigate: (path) {
+        if (!mounted) return;
 
-      if (mounted) {
+        setState(() {
+          _deepLinks.add(path);
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deep link received: $link')),
+          SnackBar(content: Text('Navigate to: $path')),
         );
-      }
-    });
+      },
+    );
   }
 
   Future<void> _loadAttribution() async {
@@ -222,8 +225,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     const SizedBox(height: 4),
                     const Text(
                       'The SDK automatically checks for a deferred deep link '
-                      'on first launch. Matches are delivered through the same '
-                      'onDeepLink stream as regular deep links.',
+                      'on first launch. Use handleDeepLinks() if you want '
+                      'regular and deferred deep links to flow through the '
+                      'same callback.',
                     ),
                   ],
                 ),
@@ -324,7 +328,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Received Deep Links',
+                      'Handled Deep Links',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -332,7 +336,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     const SizedBox(height: 8),
                     if (_deepLinks.isEmpty)
-                      const Text('No deep links received yet')
+                      const Text('No deep links handled yet')
                     else
                       ..._deepLinks.map((link) => Text('* $link')),
                   ],

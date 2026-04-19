@@ -9,7 +9,7 @@ A Flutter SDK for deferred deep linking, link management, and attribution. Works
 
 ```yaml
 dependencies:
-  linkgravity_flutter_sdk: ^1.2.2
+  linkgravity_flutter_sdk: ^0.2.0
 ```
 
 ```bash
@@ -48,9 +48,7 @@ get the `baseUrl` and platform-specific API keys from your [LinkGravity](https:/
 
 ### 2. Handle Deep Links
 
-The SDK resolves short codes automatically. Pick the approach that fits your app:
-
-**Option A: Simple callback** (using [go_router](https://pub.dev/packages/go_router), recommended for most apps)
+The SDK resolves short codes automatically and delivers the final route through a callback.
 
 ```dart
 // In your home page's initState or equivalent
@@ -168,10 +166,9 @@ await LinkGravityClient.initialize(
 
 | Method | Description |
 |--------|-------------|
-| `handleDeepLinks({onNavigate})` | Handle deep links with a simple callback |
-| `registerRoutes({context, routes})` | Register route patterns for navigation |
-| `onDeepLink` | Stream of incoming deep links |
-| `initialDeepLink` | Deep link that launched the app (cold start) |
+| `handleDeepLinks({onNavigate})` | Unified callback for regular and deferred deep links |
+| `onDeepLink` | Stream of raw links delivered by the OS |
+| `initialDeepLink` | Raw link string that launched the app (cold start) |
 | `resolveShortCode(String)` | Resolve a short code to its target route |
 
 ### Analytics & Attribution
@@ -186,10 +183,6 @@ await LinkGravityClient.initialize(
 | `clearUserId()` | Clear user association |
 | `setUTM(UTMParams?)` | Override UTM attribution |
 | `getInstallReferrerUTM()` | Get UTM from Android Install Referrer |
-
-## FlutterFlow
-
-The SDK is fully compatible with FlutterFlow. See the [FlutterFlow integration guide](lib/flutterflow/README.md) for ready-to-use Custom Actions.
 
 ## Troubleshooting
 
