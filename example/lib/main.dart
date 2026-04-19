@@ -47,32 +47,31 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String? _createdLink;
   String? _attribution;
-  String? _deferredDeepLink;
-  String? _matchMethod;
   final List<String> _deepLinks = [];
 
   @override
   void initState() {
     super.initState();
-    _setupDeepLinkListener();
+    _setupDeepLinkHandling();
     _loadAttribution();
-    _checkDeferredDeepLink();
   }
 
-  void _setupDeepLinkListener() {
-    // Listen for deep links
-    LinkGravityClient.instance.onDeepLink.listen((deepLink) {
-      setState(() {
-        _deepLinks.add('${deepLink.scheme}://${deepLink.host}${deepLink.path}');
-      });
+  void _setupDeepLinkHandling() {
+    // Use the unified callback so regular and deferred deep links are handled
+    // through the same entry point.
+    LinkGravityClient.instance.handleDeepLinks(
+      onNavigate: (path) {
+        if (!mounted) return;
 
-      // Show snackbar
-      if (mounted) {
+        setState(() {
+          _deepLinks.add(path);
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deep link received: ${deepLink.path}')),
+          SnackBar(content: Text('Navigate to: $path')),
         );
-      }
-    });
+      },
+    );
   }
 
   Future<void> _loadAttribution() async {
@@ -83,26 +82,6 @@ class _MyHomePageState extends State<MyHomePage> {
             'Campaign: ${attribution.campaignId ?? "None"}\n'
             'Source: ${attribution.utmSource ?? "None"}\n'
             'Is Deferred: ${attribution.isDeferred}';
-      });
-    }
-  }
-
-  /// Check for deferred deep link manually
-  /// Note: The SDK automatically handles this on first launch, but you can
-  /// also check manually using handleDeferredDeepLink()
-  Future<void> _checkDeferredDeepLink() async {
-    final deepLinkUrl = await LinkGravityClient.instance.handleDeferredDeepLink(
-      onFound: () {
-        debugPrint('Deferred deep link found!');
-      },
-      onNotFound: () {
-        debugPrint('No deferred deep link');
-      },
-    );
-
-    if (deepLinkUrl != null && mounted) {
-      setState(() {
-        _deferredDeepLink = deepLinkUrl;
       });
     }
   }
@@ -244,16 +223,11 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    if (_deferredDeepLink != null) ...[
-                      Text('Found: $_deferredDeepLink'),
-                      if (_matchMethod != null)
-                        Text('Match Method: $_matchMethod'),
-                    ] else
-                      const Text('No deferred deep link found'),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: _checkDeferredDeepLink,
-                      child: const Text('Check Again'),
+                    const Text(
+                      'The SDK automatically checks for a deferred deep link '
+                      'on first launch. Use handleDeepLinks() if you want '
+                      'regular and deferred deep links to flow through the '
+                      'same callback.',
                     ),
                   ],
                 ),
@@ -354,7 +328,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Received Deep Links',
+                      'Handled Deep Links',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -362,7 +336,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     const SizedBox(height: 8),
                     if (_deepLinks.isEmpty)
-                      const Text('No deep links received yet')
+                      const Text('No deep links handled yet')
                     else
                       ..._deepLinks.map((link) => Text('* $link')),
                   ],

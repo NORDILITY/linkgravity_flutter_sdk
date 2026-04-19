@@ -1,15 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'models/link.dart';
 import 'models/link_params.dart';
 import 'models/attribution.dart';
-import 'models/deep_link_data.dart';
 import 'models/analytics_event.dart';
 import 'models/utm_params.dart';
-import 'models/route_action.dart';
 import 'services/api_service.dart';
 import 'services/storage_service.dart';
 import 'services/fingerprint_service.dart';
@@ -31,7 +28,8 @@ import 'utils/logger.dart';
 /// // Initialize SDK
 /// final linkGravity = await LinkGravityClient.initialize(
 ///   baseUrl: 'https://api.linkgravity.io',
-///   apiKey: 'your-api-key',
+///   iosApiKey: 'your-ios-api-key',
+///   androidApiKey: 'your-android-api-key',
 /// );
 ///
 /// // Create a link
@@ -40,8 +38,8 @@ import 'utils/logger.dart';
 /// );
 ///
 /// // Listen for deep links
-/// linkGravity.onDeepLink.listen((deepLink) {
-///   print('Deep link opened: ${deepLink.path}');
+/// linkGravity.onDeepLink.listen((link) {
+///   print('Deep link opened: $link');
 /// });
 /// ```
 class LinkGravityClient {
@@ -89,13 +87,9 @@ class LinkGravityClient {
   /// App version
   String? _appVersion;
 
-  // Route registration fields
-  BuildContext? _routeContext;
-  Map<String, RouteAction Function(DeepLinkData)>? _registeredRoutes;
-  StreamSubscription<DeepLinkData>? _routeStreamSubscription;
-  bool _matchPrefix = true;
-
-  // Callback for handleDeepLinks mode
+  // Deep link handler state
+  StreamSubscription<String>? _linkSubscription;
+  StreamSubscription<String>? _resolvedLinkSubscription;
   Function(String)? _globalOnNavigate;
 
   /// Private constructor
@@ -106,10 +100,6 @@ class LinkGravityClient {
   }) {
     // Initialize logger
     LinkGravityLogger.setLevel(config.logLevel);
-
-    // DIAGNOSTIC: Confirm new SDK is loaded
-    // ignore: avoid_print
-    print('🚀 DEFTEST SDK LOADED - Version 1.2.1');
 
     // Initialize services
     _storage = StorageService();
@@ -134,6 +124,39 @@ class LinkGravityClient {
     _idfa = IDFAService();
   }
 
+  /// Creates an instance for testing with injectable dependencies.
+  ///
+  /// Bypasses platform-dependent initialization (PackageInfo, SharedPreferences)
+  /// and allows direct injection of service instances.
+  @visibleForTesting
+  LinkGravityClient.forTesting({
+    required this.baseUrl,
+    this.apiKey,
+    required this.config,
+    required ApiService api,
+    required DeepLinkService deepLink,
+    required FingerprintService fingerprint,
+    required StorageService storage,
+    required AnalyticsService analytics,
+  }) {
+    LinkGravityLogger.setLevel(config.logLevel);
+    _api = api;
+    _deepLink = deepLink;
+    _fingerprint = fingerprint;
+    _storage = storage;
+    _installReferrer = InstallReferrerService(storage);
+    _analytics = analytics;
+    _skadnetwork = SKAdNetworkService(apiService: api);
+    _idfa = IDFAService();
+    _initialized = true;
+  }
+
+  /// Resets the singleton instance. Only for use in tests.
+  @visibleForTesting
+  static void resetForTesting() {
+    _instance = null;
+  }
+
   /// Initialize the LinkGravity SDK
   ///
   /// This must be called before using any other SDK features.
@@ -141,13 +164,29 @@ class LinkGravityClient {
   ///
   /// Parameters:
   /// - [baseUrl]: Base URL of your LinkGravity backend (e.g., 'https://api.linkgravity.io')
-  /// - [apiKey]: Your API key (optional for some read-only operations)
+  /// - [apiKey]: Universal API key used on all platforms (optional)
+  /// - [iosApiKey]: iOS-specific API key (takes priority over [apiKey] on iOS)
+  /// - [androidApiKey]: Android-specific API key (takes priority over [apiKey] on Android)
   /// - [config]: SDK configuration (optional)
+  ///
+  /// You can provide platform-specific keys, a universal key, or both.
+  /// Platform-specific keys take priority over the universal [apiKey].
+  ///
+  /// Example with platform-specific keys:
+  /// ```dart
+  /// await LinkGravityClient.initialize(
+  ///   baseUrl: 'https://api.linkgravity.io',
+  ///   iosApiKey: 'your-ios-api-key',
+  ///   androidApiKey: 'your-android-api-key',
+  /// );
+  /// ```
   ///
   /// Returns initialized [LinkGravityClient] instance
   static Future<LinkGravityClient> initialize({
     required String baseUrl,
     String? apiKey,
+    String? iosApiKey,
+    String? androidApiKey,
     LinkGravityConfig? config,
   }) async {
     if (_instance != null) {
@@ -159,9 +198,19 @@ class LinkGravityClient {
 
     LinkGravityLogger.info('Initializing LinkGravity SDK...');
 
+    // Resolve platform-specific API key
+    String? resolvedApiKey = apiKey;
+    if (Platform.isIOS && iosApiKey != null) {
+      resolvedApiKey = iosApiKey;
+      LinkGravityLogger.debug('Using iOS-specific API key');
+    } else if (Platform.isAndroid && androidApiKey != null) {
+      resolvedApiKey = androidApiKey;
+      LinkGravityLogger.debug('Using Android-specific API key');
+    }
+
     _instance = LinkGravityClient._(
       baseUrl: baseUrl,
-      apiKey: apiKey,
+      apiKey: resolvedApiKey,
       config: config ?? LinkGravityConfig(),
     );
 
@@ -289,13 +338,10 @@ class LinkGravityClient {
       }
 
       if (match != null && match.success && match.deepLinkUrl != null) {
-        LinkGravityLogger.info('✅ Deferred deep link found!');
-        LinkGravityLogger.info('   Method: ${match.matchMethod}');
-        LinkGravityLogger.info('   URL: ${match.deepLinkUrl}');
+        LinkGravityLogger.info(
+          '✅ Deferred deep link: ${match.deepLinkUrl} (method: ${match.matchMethod})',
+        );
 
-        // Install record is created server-side during /match or /referrer call
-
-        // Track deferred link opened event
         await _analytics.trackEvent(EventType.deferredLinkOpened, {
           'linkId': match.linkId,
           'shortCode': match.shortCode,
@@ -304,76 +350,16 @@ class LinkGravityClient {
           ...?match.params,
         });
 
-        // Emit deep link event
-        final uri = Uri.parse(match.deepLinkUrl!);
-        LinkGravityLogger.debug(
-          '🔍 Parsing deep link URL: ${match.deepLinkUrl}',
-        );
+        final link = match.deepLinkUrl!;
+        final isResolved = match.isResolved ?? false;
 
-        // Pass isResolved flag to DeepLinkData
-        final deepLink = _deepLink
-            .parseLink(uri)
-            .copyWith(isResolved: match.isResolved ?? false);
+        _deepLink.initialLink = link;
+        _deepLink.initialLinkResolved = isResolved;
 
-        LinkGravityLogger.debug(
-          '🔍 Parsed deep link - Path: ${deepLink.path}, Params: ${deepLink.params}, isResolved: ${deepLink.isResolved}',
-        );
-
-        // Set as initial link so it's available via initialDeepLink getter
-        // This allows the app to check for deferred links after initialization
-        _deepLink.initialLink = deepLink;
-        LinkGravityLogger.debug(
-          '🔍 Set initialLink in DeepLinkService: ${deepLink.path}',
-        );
-
-        _deepLink.linkController.add(deepLink);
-        LinkGravityLogger.debug(
-          '🔍 Emitted deep link to stream (may have no listeners yet)',
-        );
-
-        // IMMEDIATE NAVIGATION FIX:
-        // Attempt to navigate immediately if context and routes are available.
-        // This handles cases where listeners attach too late or the app structure
-        // makes stream listening unreliable during cold start.
-        // IMMEDIATE NAVIGATION FIX:
-        // Attempt to navigate immediately if context and routes are available.
-        // This handles cases where listeners attach too late.
-        if (_routeContext != null && _registeredRoutes != null) {
-          LinkGravityLogger.info(
-            '🚀 Attempting immediate navigation for deferred link (Routes Mode)...',
-          );
-          _handleRouteMatch(deepLink);
-        } else if (_globalOnNavigate != null) {
-          LinkGravityLogger.info(
-            '🚀 Attempting immediate navigation for deferred link (Callback Mode)...',
-          );
-          // For callback mode, since we don't have the context to resolve again inside the callback easily
-          // (handleDeepLinks logic is closure-bound), we rely on the fact that the deep link
-          // might be already resolved or we just pass the path.
-          // Note: handleDeepLinks usually does resolution.
-          // Since we can't easily invoke that logic here, we will just emit to the stream
-          // AND call the callback if it's "resolved" enough.
-          // BUT: handleDeepLinks logic expects a path string.
-          // AND it does its own resolution.
-          // If we call _globalOnNavigate(path), the user's code executes context.go(path).
-          // If the path is a shortCode (e.g. "test75"), context.go("test75") might fail if not resolved.
-
-          // CRITICAL: We need handleDeepLinks users to benefit from the auto-resolution built into handleDeepLinks.
-          // Since we can't invoke it, we rely on the stream listener being active.
-          // If _globalOnNavigate is NOT null, it means handleDeepLinks WAS CALLED.
-          // If handleDeepLinks was called, the stream listener IS ACTIVE.
-          // So `_deepLink.linkController.add(deepLink)` occurring just above
-          // SHOULD have triggered the listener in handleDeepLinks.
-
-          // If it didn't, it means the stream controller is broadcast vs single, or timing.
-          // We will Log clearly.
-          LinkGravityLogger.info(
-            'ℹ️ handleDeepLinks is active. The stream event emitted above should trigger navigation.',
-          );
+        if (isResolved) {
+          _deepLink.resolvedLinkController.add(link);
         } else {
-          LinkGravityLogger.debug(
-            '⚠️ Context/Routes/Callback not ready for immediate navigation. Relying on stream/initialLink.',
-          );
+          _deepLink.linkController.add(link);
         }
       } else {
         LinkGravityLogger.debug('No deferred deep link found');
@@ -473,56 +459,20 @@ class LinkGravityClient {
   // DEEP LINKING
   // ============================================================================
 
-  /// Stream of incoming deep links
+  /// Stream of raw incoming deep link strings from the OS.
   ///
-  /// Listen to this stream to handle deep links in your app.
-  ///
-  /// Example:
-  /// ```dart
-  /// linkGravity.onDeepLink.listen((deepLink) {
-  ///   if (deepLink.path.startsWith('/product/')) {
-  ///     final productId = deepLink.path.split('/').last;
-  ///     navigateToProduct(productId);
-  ///   }
-  /// });
-  /// ```
-  Stream<DeepLinkData> get onDeepLink => _deepLink.linkStream;
+  /// Each event is the link as received (e.g. `https://example.com/abc123`
+  /// or `myapp://details`). Most apps should use [handleDeepLinks] instead —
+  /// it handles resolution and navigation automatically.
+  Stream<String> get onDeepLink => _deepLink.linkStream;
 
-  /// Get initial deep link (if app was opened via deep link)
-  DeepLinkData? get initialDeepLink => _deepLink.initialLink;
+  /// The initial deep link string captured on cold start, if any.
+  String? get initialDeepLink => _deepLink.initialLink;
 
-  /// Resolve a shortCode to its target route
+  /// Resolve a shortCode to its target route.
   ///
-  /// This is the Branch.io pattern for handling App Links when the app is already installed.
-  /// When Android/iOS intercepts an App Link like `https://linkgravity.io/tappick-test`,
-  /// the app receives the path `/tappick-test` but doesn't know what route to navigate to.
-  ///
-  /// This method calls the backend to resolve the shortCode to the actual route.
-  ///
-  /// Parameters:
-  /// - [shortCode]: The short code to resolve (e.g., 'tappick-test')
-  /// - [platform]: Platform name ('android' or 'ios'), auto-detected if not provided
-  ///
-  /// Returns a map with:
-  /// - success: true/false
-  /// - route: The target route (e.g., '/hidden?ref=Test13')
-  /// - destination: The original long URL
-  /// - utm: UTM parameters object
-  ///
-  /// Returns null if the shortCode cannot be resolved.
-  ///
-  /// Example:
-  /// ```dart
-  /// // App receives deep link: http://192.168.178.75:8080/tappick-test
-  /// final deepLink = DeepLinkData.fromUri(uri); // path = '/tappick-test'
-  /// final shortCode = deepLink.path.substring(1); // 'tappick-test'
-  ///
-  /// final result = await linkGravity.resolveShortCode(shortCode);
-  /// if (result != null && result['success'] == true) {
-  ///   final route = result['route']; // '/hidden?ref=Test13'
-  ///   context.goNamed(route);
-  /// }
-  /// ```
+  /// Returns the raw API response map with `success`, `route` (plain path),
+  /// `destination`, and `utm` fields, or null if the lookup fails.
   Future<Map<String, dynamic>?> resolveShortCode(
     String shortCode, {
     String? platform,
@@ -556,247 +506,16 @@ class LinkGravityClient {
     return null;
   }
 
-  /// Resolve and navigate to shortCode
+  /// Handles deep links end-to-end: subscribes to the OS streams and invokes
+  /// [onNavigate] with the final resolved path.
   ///
-  /// Convenience method that combines resolveShortCode with automatic navigation.
-  /// This is useful for handling App Links that are intercepted by the OS.
+  /// Covers all three entry points:
+  /// - Cold start (OS-delivered initial link)
+  /// - Warm start (links received while the app is running)
+  /// - Programmatic calls to [processDeepLink]
   ///
-  /// Parameters:
-  /// - [deepLink]: The deep link data received from the OS
-  /// - [context]: BuildContext for navigation
-  /// - [platform]: Platform name, auto-detected if not provided
-  ///
-  /// Returns true if the shortCode was resolved and navigation was attempted.
-  ///
-  /// Example:
-  /// ```dart
-  /// linkGravity.onDeepLink.listen((deepLink) async {
-  ///   final resolved = await linkGravity.resolveAndNavigate(
-  ///     deepLink: deepLink,
-  ///     context: context,
-  ///   );
-  ///
-  ///   if (!resolved) {
-  ///     // Handle fallback - shortCode not found or navigation failed
-  ///     print('Could not resolve shortCode: ${deepLink.path}');
-  ///   }
-  /// });
-  /// ```
-  Future<bool> resolveAndNavigate({
-    required DeepLinkData deepLink,
-    required BuildContext context,
-    String? platform,
-  }) async {
-    _ensureInitialized();
-
-    // Check if deep link is already explicitly resolved (e.g. from deferred match)
-    if (deepLink.isResolved) {
-      LinkGravityLogger.info(
-        'Deep link is already resolved, skipping lookup: ${deepLink.path}',
-      );
-      // Proceed directly to navigation logic below...
-      // We wrap the path in a "mock" result validation to reuse navigation flow
-      final route = deepLink.path;
-      return _navigateToRoute(context, route);
-    }
-
-    // Extract shortCode from path
-    final shortCode = _deepLink.extractShortCode(deepLink);
-    if (shortCode == null) {
-      LinkGravityLogger.warning('No shortCode found in path: ${deepLink.path}');
-      return false;
-    }
-
-    // Resolve shortCode to route
-    final result = await resolveShortCode(shortCode, platform: platform);
-    if (result == null || result['success'] != true) {
-      return false;
-    }
-
-    final route = result['route'] as String?;
-    if (route == null) {
-      LinkGravityLogger.warning('No route returned for shortCode: $shortCode');
-      return false;
-    }
-
-    // Navigate to the resolved route
-    return _navigateToRoute(context, route);
-  }
-
-  /// Helper method to navigate to a route
-  bool _navigateToRoute(BuildContext context, String route) {
-    try {
-      // Parse the route to extract path and query parameters
-      final routeUri = Uri.parse(route.startsWith('/') ? route : '/$route');
-      final resolvedDeepLink = DeepLinkData.fromUri(routeUri);
-
-      // Use the existing route matching logic if routes are registered
-      if (_registeredRoutes != null && _routeContext != null) {
-        LinkGravityLogger.info(
-          'Using registered routes to navigate to: $route',
-        );
-        _handleRouteMatch(resolvedDeepLink);
-        return true;
-      }
-
-      // Otherwise, try direct navigation
-      LinkGravityLogger.info('Navigating directly to: $route');
-      try {
-        // Try go_router style first (FlutterFlow default)
-        // ignore: avoid_dynamic_calls
-        (context as dynamic).go(route);
-      } catch (e) {
-        // Fallback to standard Navigator
-        Navigator.of(context).pushNamed(route);
-      }
-
-      return true;
-    } catch (e, stackTrace) {
-      LinkGravityLogger.error(
-        'Failed to navigate to route: $route',
-        e,
-        stackTrace,
-      );
-      return false;
-    }
-  }
-
-  /// Register deep link routes for automatic navigation
-  ///
-  /// This is the recommended way to handle deep links in your app.
-  /// It automatically handles both cold start (initial link) and warm start
-  /// (incoming links while app is running) scenarios.
-  ///
-  /// Supports two modes:
-  /// 1. **Simple String Mode**: Just pass route name, SDK auto-navigates
-  /// 2. **Custom RouteAction Mode**: Full control with custom logic
-  ///
-  /// The method:
-  /// 1. Stores the context and route map for future use
-  /// 2. Immediately checks for initial deep link (cold start)
-  /// 3. Subscribes to incoming deep links (warm start)
-  /// 4. Matches routes and executes corresponding actions
-  ///
-  /// Parameters:
-  /// - [context]: BuildContext for navigation (typically from first page)
-  /// - [routes]: Map of route patterns to either:
-  ///   - `String`: Route name for automatic navigation (e.g., 'ProductPage')
-  ///   - `RouteAction Function(DeepLinkData)`: Custom navigation logic
-  /// - [matchPrefix]: If true, matches prefixes (e.g., "/product" matches "/product/123")
-  ///                  If false, requires exact match (default: true)
-  ///
-  /// Example - Simple mode:
-  /// ```dart
-  /// LinkGravityClient.instance.registerRoutes(
-  ///   context: context,
-  ///   routes: {
-  ///     '/product': 'ProductPage',      // Simple string - auto-navigates
-  ///     '/profile': 'ProfilePage',
-  ///   },
-  /// );
-  /// ```
-  ///
-  /// Example - Custom mode:
-  /// ```dart
-  /// LinkGravityClient.instance.registerRoutes(
-  ///   context: context,
-  ///   routes: {
-  ///     '/product': (deepLink) => RouteAction((ctx, data) {
-  ///       // Custom validation
-  ///       final id = data.getParam('id');
-  ///       if (id == null) {
-  ///         ctx.goNamed('ErrorPage');
-  ///         return;
-  ///       }
-  ///
-  ///       // Custom analytics
-  ///       trackEvent('product_opened', {'id': id});
-  ///
-  ///       ctx.goNamed('ProductPage', extra: {'id': id});
-  ///     }),
-  ///   },
-  /// );
-  /// ```
-  ///
-  /// Example - Mixed mode:
-  /// ```dart
-  /// LinkGravityClient.instance.registerRoutes(
-  ///   context: context,
-  ///   routes: {
-  ///     '/product': 'ProductPage',                    // Simple
-  ///     '/special': (deepLink) => RouteAction(...),  // Custom
-  ///   },
-  /// );
-  /// ```
-  void registerRoutes({
-    required BuildContext context,
-    required Map<String, dynamic> routes,
-    bool matchPrefix = true,
-  }) {
-    _ensureInitialized();
-
-    // Store for future use
-    _routeContext = context;
-    _matchPrefix = matchPrefix;
-
-    // Convert routes to internal format (handles both String and RouteAction)
-    _registeredRoutes = _convertRoutesToActions(routes);
-
-    LinkGravityLogger.info('Registering ${routes.length} deep link routes...');
-    LinkGravityLogger.debug(
-      '🔍 Registered route patterns: ${_registeredRoutes!.keys.toList()}',
-    );
-
-    // Handle initial deep link (cold start)
-    final initialLink = _deepLink.initialLink;
-    LinkGravityLogger.debug(
-      '🔍 Checking for initialLink: ${initialLink != null ? initialLink.path : "null"}',
-    );
-
-    if (initialLink != null) {
-      LinkGravityLogger.info(
-        '✅ Found initial deep link, processing: ${initialLink.path}',
-      );
-      _handleRouteMatch(initialLink);
-      // Clear initial link after processing to prevent duplicate handling
-      _deepLink.initialLink = null;
-      LinkGravityLogger.debug('🔍 Cleared initialLink after processing');
-    } else {
-      LinkGravityLogger.warning(
-        '⚠️ No initialLink found - deferred link may not have been set',
-      );
-    }
-
-    // Listen for future deep links (warm start)
-    _routeStreamSubscription?.cancel();
-    _routeStreamSubscription = _deepLink.linkStream.listen(
-      (deepLink) {
-        LinkGravityLogger.debug(
-          '🔍 Received deep link from stream: ${deepLink.path}',
-        );
-        _handleRouteMatch(deepLink);
-      },
-      onError: (error, stackTrace) {
-        LinkGravityLogger.error('Deep link stream error', error, stackTrace);
-      },
-    );
-    LinkGravityLogger.debug(
-      '🔍 Stream listener registered for future deep links',
-    );
-
-    LinkGravityLogger.info('✅ Deep link routes registered successfully');
-  }
-
-  /// Streamlined Deep Link Handler (Recommended for FlutterFlow)
-  ///
-  /// This method simplifies deep link handling by centralizing logic for:
-  /// 1. Cold Start (Initial Link)
-  /// 2. Warm Start (Stream Listener)
-  /// 3. Short Code Resolution
-  /// 4. Parameter Merging
-  ///
-  /// Instead of registering routes, you simply provide an [onNavigate] callback
-  /// that receives the final, resolved, fully-parameterized path ready for `go()`.
+  /// Pre-resolved deferred links (from the install-referrer / fingerprint
+  /// match) skip the /resolve call and are passed straight to [onNavigate].
   ///
   /// Example:
   /// ```dart
@@ -808,328 +527,131 @@ class LinkGravityClient {
   /// ```
   void handleDeepLinks({required Function(String) onNavigate}) {
     _ensureInitialized();
-    LinkGravityLogger.info('🔗 Initializing streamlined deep link handler');
+    LinkGravityLogger.info('🔗 Deep link handler initialized');
 
-    // Store global callback for deferred link handler to use
     _globalOnNavigate = onNavigate;
 
-    // 1. Define the processing logic
-    Future<void> processLink(String rawPath) async {
-      if (rawPath.isEmpty || rawPath == '/') return;
-
-      LinkGravityLogger.debug('🔍 Processing raw link: $rawPath');
-
-      // Internal Helper to Resolve & Merge
-      // Extracts potential query params from rawPath (e.g. tappick?promo=1)
-      Uri incomingUri = Uri.parse(
-        rawPath.startsWith('http') ? rawPath : 'http://dummy.com/$rawPath',
-      );
-
-      // Extract shortCode (last segment or full path)
-      String shortCode = incomingUri.pathSegments.isNotEmpty
-          ? incomingUri.pathSegments.last
-          : rawPath;
-
-      if (shortCode.startsWith('/')) shortCode = shortCode.substring(1);
-
-      Map<String, String> incomingParams = incomingUri.queryParameters;
-
-      LinkGravityLogger.info('🔍 Resolving ShortCode: $shortCode');
-
-      try {
-        final result = await resolveShortCode(shortCode);
-
-        if (result != null && result['success'] == true) {
-          String routeString = result['route'] as String;
-          LinkGravityLogger.info('✅ Resolved to base route: $routeString');
-
-          // Merge Params (Backend + Incoming)
-          Uri routeUri = Uri.parse(routeString);
-          Map<String, dynamic> finalParams = {
-            ...routeUri.queryParameters,
-            ...incomingParams,
-          };
-
-          // Reconstruct final path with merged params
-          String finalPath = Uri(
-            path: routeUri.path.startsWith('/')
-                ? routeUri.path
-                : '/${routeUri.path}',
-            queryParameters: finalParams.isNotEmpty ? finalParams : null,
-          ).toString();
-
-          LinkGravityLogger.info('🚀 Delegating navigation to: $finalPath');
-          onNavigate(finalPath);
-
-          // UTM Handling
-          final utm = result['utm'] as Map<String, dynamic>?;
-          if (utm != null) {
-            try {
-              setUTM(UTMParams.fromJson(utm));
-            } catch (_) {}
-          }
-        } else {
-          LinkGravityLogger.warning('⚠️ Resolution failed for: $shortCode');
-
-          // FALLBACK: Treat as direct path
-          // If the "Deep Link" was already resolved by the deferred service to "/hiddenDeepLinkPage",
-          // then the "shortCode" extraction might just have returned "hiddenDeepLinkPage".
-          // In this case, we should just navigate to it!
-
-          String directPath = shortCode;
-          if (!directPath.startsWith('/')) directPath = '/$directPath';
-
-          // Add incoming params back
-          if (incomingParams.isNotEmpty) {
-            final uri = Uri(path: directPath, queryParameters: incomingParams);
-            directPath = uri.toString();
-          }
-
-          LinkGravityLogger.info(
-            '🚀 Fallback: Navigating directly to path sections: $directPath',
-          );
-          onNavigate(directPath);
-        }
-      } catch (e, stack) {
-        LinkGravityLogger.error('❌ Error resolving link', e, stack);
-      }
-    }
-
-    // 2. Listen for Warm Links
-    _routeStreamSubscription?.cancel();
-    _routeStreamSubscription = _deepLink.linkStream.listen(
-      (l) {
-        // If the link is already resolved (e.g., from deferred deep link match),
-        // navigate directly without trying to resolve the shortCode again
-        if (l.isResolved) {
-          LinkGravityLogger.info(
-            '✅ Link already resolved, navigating directly to: ${l.path}',
-          );
-          final path = l.path.startsWith('/') ? l.path : '/${l.path}';
-          onNavigate(path);
-        } else {
-          processLink(l.path);
-        }
-      },
+    _linkSubscription?.cancel();
+    _linkSubscription = _deepLink.linkStream.listen(
+      (link) => processDeepLink(link),
       onError: (e, s) => LinkGravityLogger.error('Stream Error', e, s),
     );
 
-    // 3. Process Cold Start
-    final coldLink = _deepLink.initialLink;
-    if (coldLink != null) {
-      LinkGravityLogger.info('❄️ Processing Cold Start Link: ${coldLink.path}');
-      // Small delay to ensure UI/Router is ready
-      Future.delayed(const Duration(milliseconds: 500), () {
-        // If the link is already resolved (e.g., from deferred deep link match),
-        // navigate directly without trying to resolve the shortCode again
-        if (coldLink.isResolved) {
-          LinkGravityLogger.info(
-            '✅ Cold start link already resolved, navigating directly to: ${coldLink.path}',
-          );
-          final path =
-              coldLink.path.startsWith('/') ? coldLink.path : '/${coldLink.path}';
-          onNavigate(path);
-        } else {
-          processLink(coldLink.path);
-        }
-      });
-      _deepLink.initialLink = null; // Clear to prevent double processing
-    }
-  }
-
-  /// Convert mixed route map to RouteAction functions
-  ///
-  /// Supports two input types:
-  /// 1. String: Route name for automatic navigation
-  /// 2. RouteAction Function(DeepLinkData): Custom navigation logic
-  ///
-  /// Returns a normalized map with RouteAction builders for internal use.
-  Map<String, RouteAction Function(DeepLinkData)> _convertRoutesToActions(
-    Map<String, dynamic> routes,
-  ) {
-    final converted = <String, RouteAction Function(DeepLinkData)>{};
-
-    for (final entry in routes.entries) {
-      final pattern = entry.key;
-      final value = entry.value;
-
-      if (value is String) {
-        // Simple mode: String route name
-        final routeName = value;
-        converted[pattern] = (deepLink) => RouteAction((ctx, data) {
-          // Auto-navigation using dynamic dispatch
-          // This supports both go_router (goNamed) and Flutter Navigator (pushNamed)
-          try {
-            // Try go_router style first (FlutterFlow default)
-            // ignore: avoid_dynamic_calls
-            (ctx as dynamic).goNamed(
-              routeName,
-              extra: data.params.isNotEmpty ? data.params : null,
-            );
-          } catch (e) {
-            // Fallback to standard Navigator
-            try {
-              Navigator.of(ctx).pushNamed(
-                routeName,
-                arguments: data.params.isNotEmpty ? data.params : null,
-              );
-            } catch (navError) {
-              LinkGravityLogger.error(
-                'Failed to navigate to $routeName. '
-                'Ensure your context supports goNamed() or Navigator.pushNamed()',
-                navError,
-              );
-              rethrow;
-            }
-          }
-        });
-
-        LinkGravityLogger.debug(
-          'Registered simple route: $pattern -> $routeName',
-        );
-      } else if (value is RouteAction Function(DeepLinkData)) {
-        // Custom mode: User-provided RouteAction builder
-        converted[pattern] = value;
-
-        LinkGravityLogger.debug(
-          'Registered custom route: $pattern -> RouteAction',
-        );
-      } else {
-        throw ArgumentError(
-          'Route value must be either String (route name) or '
-          'RouteAction Function(DeepLinkData). Got: ${value.runtimeType}',
-        );
-      }
-    }
-
-    return converted;
-  }
-
-  /// Handle route matching for incoming deep links
-  ///
-  /// This is called automatically by [registerRoutes] when a deep link is received.
-  Future<void> _handleRouteMatch(DeepLinkData deepLink) async {
-    LinkGravityLogger.debug(
-      '🔍 _handleRouteMatch called with path: ${deepLink.path}',
+    _resolvedLinkSubscription?.cancel();
+    _resolvedLinkSubscription = _deepLink.resolvedLinkStream.listen(
+      (link) => processDeepLink(link, isResolved: true),
+      onError: (e, s) => LinkGravityLogger.error('Resolved Stream Error', e, s),
     );
 
-    if (_routeContext == null || _registeredRoutes == null) {
+    final coldLink = _deepLink.initialLink;
+    if (coldLink != null) {
+      final coldResolved = _deepLink.initialLinkResolved;
+      _deepLink.initialLink = null;
+      _deepLink.initialLinkResolved = false;
+      // Small delay so the app's router is mounted before we navigate.
+      Future.delayed(
+        const Duration(milliseconds: 500),
+        () => processDeepLink(coldLink, isResolved: coldResolved),
+      );
+    }
+  }
+
+  /// Process a raw deep link string (path or URI).
+  ///
+  /// Accepts any of:
+  /// - Plain path: `/details`, `/parent/child`
+  /// - HTTP(S) URL: `https://example.com/details?promo=summer`
+  /// - Custom-scheme URI: `myapp://details`
+  ///
+  /// Extracts the shortCode (last path segment), resolves it against the
+  /// backend, and invokes the `onNavigate` callback registered via
+  /// [handleDeepLinks] with the resolved route plus any incoming query params.
+  /// Falls back to the original path if resolution fails.
+  ///
+  /// Set [isResolved] to true to skip the /resolve call and navigate directly
+  /// to [link] (used for deferred deep link matches that return a pre-resolved
+  /// route).
+  Future<void> processDeepLink(String link, {bool isResolved = false}) async {
+    _ensureInitialized();
+    if (_globalOnNavigate == null) {
       LinkGravityLogger.warning(
-        '❌ Route context not available (context: ${_routeContext != null}, routes: ${_registeredRoutes != null})',
+        'processDeepLink called before handleDeepLinks — nothing to navigate',
       );
       return;
     }
+    if (link.isEmpty || link == '/') return;
 
-    LinkGravityLogger.debug(
-      '🔍 Attempting to match route for: ${deepLink.path}',
-    );
-    LinkGravityLogger.debug(
-      '🔍 Match mode: ${_matchPrefix ? "prefix" : "exact"}',
-    );
-    LinkGravityLogger.debug(
-      '🔍 Available routes: ${_registeredRoutes!.keys.toList()}',
-    );
+    final (path, params) = _splitLink(link);
+    if (path.isEmpty || path == '/') return;
 
-    // Auto-resolution: Try to resolve as short code if enabled
-    DeepLinkData resolvedDeepLink = deepLink;
-    if (config.enableAutoResolution) {
-      final shortCode = _deepLink.extractShortCode(deepLink);
-      if (shortCode != null && shortCode.isNotEmpty) {
-        LinkGravityLogger.info(
-          '🔍 Auto-resolution enabled, attempting to resolve: $shortCode',
-        );
-
-        try {
-          final result = await resolveShortCode(shortCode);
-
-          if (result != null && result['success'] == true) {
-            final resolvedRoute = result['route'] as String?;
-            if (resolvedRoute != null && resolvedRoute.isNotEmpty) {
-              LinkGravityLogger.info(
-                '✅ Auto-resolved: $shortCode -> $resolvedRoute',
-              );
-
-              // Create new DeepLinkData with resolved route
-              final routeUri = Uri.parse(
-                resolvedRoute.startsWith('/')
-                    ? resolvedRoute
-                    : '/$resolvedRoute',
-              );
-              resolvedDeepLink = DeepLinkData.fromUri(routeUri);
-
-              // Set UTM parameters if present in resolution result
-              final utm = result['utm'] as Map<String, dynamic>?;
-              if (utm != null) {
-                try {
-                  setUTM(UTMParams.fromJson(utm));
-                } catch (e) {
-                  LinkGravityLogger.warning('Failed to set UTM parameters: $e');
-                }
-              }
-            } else {
-              LinkGravityLogger.warning(
-                'Resolution succeeded but no route returned for: $shortCode',
-              );
-            }
-          } else {
-            LinkGravityLogger.debug(
-              'Resolution not found for: $shortCode, falling back to direct route matching',
-            );
-          }
-        } catch (e, stackTrace) {
-          LinkGravityLogger.error(
-            'Auto-resolution failed for $shortCode, falling back to direct route matching',
-            e,
-            stackTrace,
-          );
-        }
-      }
+    if (isResolved) {
+      final finalPath = _appendQueryParams(path, params);
+      LinkGravityLogger.info('✅ Pre-resolved, navigating: $finalPath');
+      _globalOnNavigate!(finalPath);
+      return;
     }
 
-    // Route matching: Match resolved path against registered routes
-    for (final entry in _registeredRoutes!.entries) {
-      final routePattern = entry.key;
-      final actionBuilder = entry.value;
+    final segments = path.split('/').where((s) => s.isNotEmpty).toList();
+    if (segments.isEmpty) return;
+    final shortCode = segments.last;
 
-      bool matches = _matchPrefix
-          ? resolvedDeepLink.path.startsWith(routePattern)
-          : resolvedDeepLink.path == routePattern;
+    LinkGravityLogger.info('🔍 Resolving: $shortCode');
 
-      LinkGravityLogger.debug(
-        '🔍 Testing pattern "$routePattern" against "${deepLink.path}": ${matches ? "MATCH" : "no match"}',
-      );
+    try {
+      final result = await resolveShortCode(shortCode);
 
-      if (matches) {
-        LinkGravityLogger.info(
-          '✅ Matched route: $routePattern -> ${resolvedDeepLink.path}',
-        );
+      String finalPath;
+      if (result != null && result['success'] == true) {
+        // Backend returns `route` as a plain path (e.g. "/details") — use it
+        // verbatim and append any incoming query params.
+        final route = result['route'] as String;
+        finalPath = _appendQueryParams(route, params);
 
-        try {
-          LinkGravityLogger.debug(
-            '🔍 Building action for route: $routePattern',
-          );
-          final action = actionBuilder(deepLink);
-          LinkGravityLogger.debug('🔍 Executing action with context');
-          action.execute(_routeContext!, deepLink);
-          LinkGravityLogger.info(
-            '✅ Action executed successfully for: ${deepLink.path}',
-          );
-        } catch (e, stackTrace) {
-          LinkGravityLogger.error(
-            '❌ Error executing route action for $routePattern',
-            e,
-            stackTrace,
-          );
+        final utm = result['utm'] as Map<String, dynamic>?;
+        if (utm != null) {
+          try {
+            setUTM(UTMParams.fromJson(utm));
+          } catch (_) {}
         }
-
-        return; // First match wins
+      } else {
+        LinkGravityLogger.warning('⚠️ Resolution failed for: $shortCode');
+        finalPath = _appendQueryParams(path, params);
       }
-    }
 
-    LinkGravityLogger.warning('⚠️ No route matched for: ${deepLink.path}');
-    LinkGravityLogger.warning(
-      '⚠️ This means the deep link path does not match any registered route pattern',
-    );
+      LinkGravityLogger.info('🚀 Navigating: $finalPath');
+      _globalOnNavigate?.call(finalPath);
+    } catch (e, stack) {
+      LinkGravityLogger.error('❌ Error resolving link', e, stack);
+    }
+  }
+
+  /// Split a raw link into (path, queryParameters).
+  ///
+  /// For HTTP(S) URLs the host is stripped. For custom-scheme URIs (e.g.
+  /// `myapp://details`) the host becomes the first path segment.
+  static (String, Map<String, String>) _splitLink(String link) {
+    final uri = link.contains('://')
+        ? Uri.parse(link)
+        : Uri.parse(
+            'http://x.invalid${link.startsWith('/') ? link : '/$link'}',
+          );
+
+    final isHttp = uri.scheme == 'http' || uri.scheme == 'https';
+    final path = (!isHttp && uri.host.isNotEmpty)
+        ? '/${uri.host}${uri.path}'
+        : uri.path;
+
+    return (path, uri.queryParameters);
+  }
+
+  static String _appendQueryParams(String path, Map<String, String> params) {
+    if (params.isEmpty) return path;
+    final separator = path.contains('?') ? '&' : '?';
+    final encoded = params.entries
+        .map((e) =>
+            '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    return '$path$separator$encoded';
   }
 
   // ============================================================================
@@ -1392,75 +914,6 @@ class LinkGravityClient {
     }
   }
 
-  /// Handle deferred deep linking manually
-  ///
-  /// Call this on app launch to detect if this is a deferred deep link installation.
-  /// The SDK will use the best available matching method:
-  /// - Android: Play Install Referrer (100% accuracy) → Fingerprint fallback
-  /// - iOS: Fingerprint matching (~85-90% accuracy)
-  ///
-  /// Parameters:
-  /// - [onFound]: Callback when a deferred deep link is found
-  /// - [onNotFound]: Optional callback when no deferred deep link is found
-  ///
-  /// Returns the matched deep link URL if found, null otherwise.
-  Future<String?> handleDeferredDeepLink({
-    required VoidCallback onFound,
-    VoidCallback? onNotFound,
-  }) async {
-    if (!_initialized) {
-      LinkGravityLogger.error('LinkGravity not initialized');
-      onNotFound?.call();
-      return null;
-    }
-
-    try {
-      LinkGravityLogger.info('Handling deferred deep link...');
-
-      final deferredService = DeferredDeepLinkService(
-        apiService: _api,
-        fingerprintService: _fingerprint,
-        storageService: _storage,
-        deviceId: _deviceId,
-        deviceFingerprint: _deviceFingerprint,
-        appVersion: _appVersion,
-      );
-
-      // Use the new method that supports Android referrer
-      final match = await deferredService.matchDeferredDeepLink();
-
-      if (match != null && match.success && match.deepLinkUrl != null) {
-        LinkGravityLogger.info(
-          '✅ Deferred deep link found: ${match.deepLinkUrl}',
-        );
-        LinkGravityLogger.info('   Method: ${match.matchMethod}');
-
-        // Check confidence for fingerprint matches
-        if (match.isAcceptableConfidence()) {
-          onFound();
-
-          // Install record is created server-side during /match or /referrer call
-
-          return match.deepLinkUrl;
-        } else {
-          LinkGravityLogger.warning(
-            '⚠️ Deep link confidence too low: ${match.confidence}',
-          );
-          onNotFound?.call();
-          return null;
-        }
-      } else {
-        LinkGravityLogger.info('ℹ️ No deferred deep link found');
-        onNotFound?.call();
-        return null;
-      }
-    } catch (e) {
-      LinkGravityLogger.error('Error handling deferred deep link: $e', e);
-      onNotFound?.call();
-      return null;
-    }
-  }
-
   /// Reset SDK (clear all data)
   ///
   /// WARNING: This will clear all cached data including attribution.
@@ -1484,10 +937,9 @@ class LinkGravityClient {
     _deepLink.dispose();
     _api.dispose();
 
-    // Clean up route registration
-    _routeStreamSubscription?.cancel();
-    _routeContext = null;
-    _registeredRoutes = null;
+    _linkSubscription?.cancel();
+    _resolvedLinkSubscription?.cancel();
+    _globalOnNavigate = null;
 
     _initialized = false;
     _instance = null;

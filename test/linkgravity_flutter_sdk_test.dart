@@ -49,15 +49,6 @@ void main() {
       );
       expect(invalidShortCode.validate(), false);
     });
-
-    test('DeepLinkData fromUri', () {
-      final uri = Uri.parse('linkgravity://host/product/123?ref=campaign');
-      final deepLink = DeepLinkData.fromUri(uri);
-
-      expect(deepLink.scheme, 'linkgravity');
-      expect(deepLink.path, '/product/123');
-      expect(deepLink.params['ref'], 'campaign');
-    });
   });
 
   group('Validators', () {
@@ -72,8 +63,10 @@ void main() {
       expect(Validators.isValidShortCode('abc123'), true);
       expect(Validators.isValidShortCode('test-code'), true);
       expect(Validators.isValidShortCode('ab'), false); // Too short
-      expect(Validators.isValidShortCode('this-is-way-too-long-code'), false); // Too long
-      expect(Validators.isValidShortCode('invalid@code'), false); // Invalid chars
+      expect(Validators.isValidShortCode('this-is-way-too-long-code'),
+          false); // Too long
+      expect(
+          Validators.isValidShortCode('invalid@code'), false); // Invalid chars
     });
 
     test('isValidDeepLinkPath', () {

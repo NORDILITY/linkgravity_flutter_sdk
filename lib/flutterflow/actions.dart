@@ -271,30 +271,13 @@ Future<bool> flushLinkGravityEvents() async {
   }
 }
 
-/// Get the initial deep link data (if app was opened via deep link)
+/// Get the initial deep link string (if app was opened via deep link)
 ///
-/// Returns: JSON string of deep link data, or null if no initial deep link
-///
-/// Example returned JSON:
-/// ```json
-/// {
-///   "path": "/product/123",
-///   "params": {
-///     "ref": "campaign"
-///   },
-///   "scheme": "https",
-///   "host": "example.com"
-/// }
-/// ```
+/// Returns: the raw link (e.g. `https://example.com/abc123` or `myapp://foo`),
+/// or null if no initial deep link is present.
 Future<String?> getInitialDeepLink() async {
   try {
-    final deepLink = LinkGravityClient.instance.initialDeepLink;
-
-    if (deepLink != null) {
-      return jsonEncode(deepLink.toJson());
-    }
-
-    return null;
+    return LinkGravityClient.instance.initialDeepLink;
   } catch (e) {
     print('Failed to get initial deep link: $e');
     return null;

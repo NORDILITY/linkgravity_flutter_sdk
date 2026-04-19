@@ -61,7 +61,8 @@ import 'package:linkgravity_flutter_sdk/linkgravity_flutter_sdk.dart';
 Future<bool> initializeLinkGravity() async {
   await LinkGravityClient.initialize(
     baseUrl: 'https://your-api.com',
-    apiKey: 'your-key',
+    iosApiKey: 'your-ios-api-key',
+    androidApiKey: 'your-android-api-key',
     config: LinkGravityConfig(
       enableAnalytics: true,
       enableDeepLinking: true,

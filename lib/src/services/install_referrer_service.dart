@@ -263,7 +263,7 @@ class InstallReferrerService {
     try {
       final data = await _storage.getData(_keyInstallUTM);
       if (data != null) {
-        return UTMParams.fromJson(data as Map<String, dynamic>);
+        return UTMParams.fromJson(data);
       }
       return null;
     } catch (e) {

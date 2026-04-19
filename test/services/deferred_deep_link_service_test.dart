@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:linkgravity_flutter_sdk/src/services/api_service.dart';
 
@@ -42,8 +43,8 @@ void main() {
 
       // 400 - should not retry
       final badRequest = ApiException('Bad request', statusCode: 400);
-      expect(badRequest.statusCode! >= 400 && badRequest.statusCode! < 500,
-          true);
+      expect(
+          badRequest.statusCode! >= 400 && badRequest.statusCode! < 500, true);
 
       // 500 - should retry
       final serverError = ApiException('Server error', statusCode: 500);

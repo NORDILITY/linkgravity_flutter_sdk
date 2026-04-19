@@ -235,11 +235,11 @@ void main() {
         );
 
         final map = utm.toMap();
-        expect(map['source'], equals('google'));
-        expect(map['campaign'], equals('test'));
-        expect(map['medium'], isNull);
-        expect(map['content'], isNull);
-        expect(map['term'], isNull);
+        expect(map['utm_source'], equals('google'));
+        expect(map['utm_medium'], isNull);
+        expect(map['utm_campaign'], equals('test'));
+        expect(map['utm_content'], isNull);
+        expect(map['utm_term'], isNull);
         expect(map.length, equals(5));
       });
     });
