@@ -95,26 +95,6 @@ The SDK automatically selects the best matching method:
 
 The `DeferredDeepLinkService` includes retry logic with exponential backoff (3 attempts max: 2s, 4s intervals) and does NOT retry on 404/400 errors.
 
-### Route Registration API
-
-The SDK provides a simplified callback-based route registration system that works with any navigation system (go_router, Navigator 2.0, etc.):
-
-```dart
-LinkGravityClient.instance.registerRoutes(
-  context: context,
-  routes: {
-    '/product': (deepLink) => RouteAction((ctx, data) {
-      ctx.goNamed('ProductPage', extra: {'id': data.getParam('id')});
-    }),
-  },
-);
-```
-
-This pattern:
-- Uses `scheduleMicrotask` to prevent navigation-during-build errors
-- Works for both cold starts (app launched from link) and warm starts (app already running)
-- Automatically handles prefix matching (`matchPrefix: true` by default)
-
 ## FlutterFlow Specifics
 
 **FlutterFlow Integration Files** ([lib/flutterflow/](lib/flutterflow/))

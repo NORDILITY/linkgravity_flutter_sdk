@@ -72,23 +72,6 @@ Future<bool> initializeLinkGravity() async {
 }
 ```
 
-**Action 2: Attach Routes (on first page load)**
-```dart
-import 'package:linkgravity_flutter_sdk/linkgravity_flutter_sdk.dart';
-
-Future<void> attachLinkGravityListener(BuildContext context) async {
-  LinkGravityClient.instance.registerRoutes(
-    context: context,
-    routes: {
-      '/product': (deepLink) => RouteAction.goNamed(
-        'ProductPage',
-        extra: {'id': deepLink.getParam('id')},
-      ),
-    },
-  );
-}
-```
-
 That's it! 🎉
 
 ## 🔄 Migration from Old Approach

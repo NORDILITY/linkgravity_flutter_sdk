@@ -60,6 +60,8 @@ LinkGravityClient.instance.handleDeepLinks(
 );
 ```
 
+**Android configuration**
+
 package name can be found in build.gradle.ktr for kotlin or build.grade for java under applicationId.
 for android add 
 ```xml
@@ -71,7 +73,10 @@ for android add
     <data android:scheme="https" />
 </intent-filter>
 ```
-To test deep links in andoird emulator without having sha256 fingerprint of you apk, configure your app in the emulator to accept external links
+To test deep links in Android emulator without having sha256 fingerprint of you apk, configure your app in the emulator to accept external links
+
+**iOS configuration**
+tbd
 
 ### 3. Deferred Deep Linking
 
