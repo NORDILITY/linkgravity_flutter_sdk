@@ -76,6 +76,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String? _createdLink;
   String? _attribution;
+  int _queuedEvents = 0;
 
   @override
   void initState() {
@@ -127,15 +128,33 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _trackEvent() async {
-    await LinkGravityClient.instance.trackEvent('button_clicked', {
+    // Custom event name with a small properties payload. The SDK merges
+    // `config.globalMetadata` and auto-attaches install-time UTM params.
+    await LinkGravityClient.instance.trackEvent('demo_button_clicked', {
       'button_id': 'demo_button',
-      'timestamp': DateTime.now().toIso8601String(),
+      'screen': 'home',
+      'clicked_at': DateTime.now().toIso8601String(),
     });
+
+    // Events are batched (default: 20 per batch or every 30s), so this call
+    // only enqueues — use the Flush button to force an immediate send.
+    setState(() => _queuedEvents++);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Event queued ($_queuedEvents pending)')),
+      );
+    }
+  }
+
+  Future<void> _flushEvents() async {
+    await LinkGravityClient.instance.flushEvents();
+    setState(() => _queuedEvents = 0);
 
     if (mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Event tracked!')));
+      ).showSnackBar(const SnackBar(content: Text('Events flushed to backend')));
     }
   }
 
@@ -301,13 +320,30 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
+                    const Text(
+                      'Track Event enqueues a "demo_button_clicked" event via '
+                      'LinkGravityClient.trackEvent(). The SDK batches events '
+                      '(20 per batch or every 30s) and auto-attaches install '
+                      'UTM for attribution. Use Flush to force an immediate '
+                      'POST to /api/v1/events.',
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         ElevatedButton(
                           onPressed: _trackEvent,
                           child: const Text('Track Event'),
                         ),
-                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: _queuedEvents == 0 ? null : _flushEvents,
+                          child: Text(
+                            _queuedEvents == 0
+                                ? 'Flush (queue empty)'
+                                : 'Flush ($_queuedEvents queued)',
+                          ),
+                        ),
                         ElevatedButton(
                           onPressed: _trackConversion,
                           child: const Text('Track Conversion'),
