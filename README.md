@@ -60,24 +60,6 @@ LinkGravityClient.instance.handleDeepLinks(
 );
 ```
 
-**Android configuration**
-
-package name can be found in build.gradle.ktr for kotlin or build.grade for java under applicationId.
-for android add 
-```xml
-<intent-filter android:autoVerify="true">
-    <action android:name="android.intent.action.VIEW" />
-    <category android:name="android.intent.category.DEFAULT" />
-    <category android:name="android.intent.category.BROWSABLE" />
-    <data android:scheme="http" android:host="<replace_with_your_sub_domain_in_linkgravity>.links.linkgravity.io" />
-    <data android:scheme="https" />
-</intent-filter>
-```
-To test deep links in Android emulator without having sha256 fingerprint of you apk, configure your app in the emulator to accept external links
-
-**iOS configuration**
-tbd
-
 ### 3. Deferred Deep Linking
 
 Deferred deep linking works **automatically on first app launch** — no extra code required. The SDK:
@@ -132,8 +114,46 @@ Events are batched and sent automatically. If the device is offline, events are 
 
 Deep links require platform-specific configuration:
 
-- **Android** (App Links): [Android setup guide](https://docs.linkgravity.io/sdk/android-setup)
-- **iOS** (Universal Links): [iOS setup guide](https://docs.linkgravity.io/sdk/ios-setup)
+
+**Android configuration**
+
+1. Navigate to android/app/src/main/AndroidManifest.xml file.
+
+2. Add the following metadata tag and intent filter inside the <activity> tag with .MainActivity.
+
+Replace `{replace_with_your_sub_domain_in_linkgravity}` with your linkgravity subdomain.
+
+Package name can be found in build.gradle.ktr for kotlin or build.grade for java under applicationId.
+
+```xml
+<intent-filter android:autoVerify="true">
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="http" android:host="{replace_with_your_sub_domain_in_linkgravity}.links.linkgravity.io" />
+    <data android:scheme="https" />
+</intent-filter>
+```
+To test deep links in Android emulator without having sha256 fingerprint of you apk, configure your app in the emulator to accept external links.
+
+**iOS configuration**
+
+1. Open the ios/Runner/Runner.entitlements XML file in your preferred editor.
+
+2. Add an associated domain inside the <dict> tag.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.developer.associated-domains</key>
+  <array>
+    <string>applinks:{replace_with_your_sub_domain_in_linkgravity}.links.linkgravity.io</string>
+  </array>
+</dict>
+</plist>
+```
 
 ## Configuration
 
