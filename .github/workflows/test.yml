@@ -19,7 +19,8 @@ jobs:
         uses: flutter-actions/setup-flutter@480ffd9d3a24db4ce099d7ceb62c3d6959661eb8
         with:
           channel: stable
-          version: 3.10.0
+          version: latest
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
