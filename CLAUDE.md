@@ -58,8 +58,11 @@ flutter run
 
 **LinkGravityClient** ([lib/src/linkgravity_client.dart](lib/src/linkgravity_client.dart))
 - Singleton main client that orchestrates all SDK functionality
-- Manages initialization, service lifecycle, and route registration
+- Manages initialization, service lifecycle, and the `handleDeepLinks(onNavigate:)` callback
 - Provides public API for link management, event tracking, and deep linking
+
+**Config** ([lib/src/linkgravity_config.dart](lib/src/linkgravity_config.dart))
+- `LinkGravityConfig` - feature flags (analytics, deep linking) and `LogLevel`
 
 **Service Layer** ([lib/src/services/](lib/src/services/))
 - `api_service.dart` - HTTP client wrapper with authentication (uses `Authorization: Bearer` header)
@@ -69,11 +72,20 @@ flutter run
 - `fingerprint_service.dart` - Device fingerprinting for probabilistic matching (iOS and Android fallback)
 - `analytics_service.dart` - Event batching, offline queue, and retry logic
 - `storage_service.dart` - Persistent storage via `shared_preferences`
+- `skadnetwork_service.dart` - iOS SKAdNetwork conversion value updates (via platform channel)
+- `idfa_service.dart` - iOS App Tracking Transparency (ATT) authorization and IDFA access (via platform channel)
 
 **Model Layer** ([lib/src/models/](lib/src/models/))
-- Data classes for API requests/responses
-- `route_action.dart` - Callback-based navigation wrapper (no dependency on go_router)
+- `link.dart`, `link_params.dart` - Link create/update payloads and responses
+- `analytics_event.dart` - Tracked event types and payloads
+- `attribution.dart` - Attribution metadata
+- `utm_params.dart` - UTM parameter parsing/serialization
+- `deep_link_match.dart` - Probabilistic match result (confidence/score)
 - `deferred_link_response.dart` - Wraps deferred link results with match method metadata
+
+**Utilities** ([lib/src/utils/](lib/src/utils/))
+- `logger.dart` - `LinkGravityLogger`, `LogLevel`, `LogObserver`
+- `validators.dart` - Input validation helpers
 
 ### Platform Integration
 
@@ -83,8 +95,10 @@ flutter run
 - Requires `com.android.installreferrer:installreferrer:2.2` dependency
 
 **iOS Native** ([ios/Classes/](ios/Classes/))
-- Plugin registration only - no custom native code required
-- Fingerprint matching handled in Dart layer
+- `LinkGravityFlutterSdkPlugin.swift` - Flutter plugin registration and method-channel router for SKAdNetwork + ATT calls
+- `SKAdNetworkService.swift` - SKAdNetwork conversion value handling (iOS 14+, postback API on iOS 16.1+)
+- `ATTService.swift` - App Tracking Transparency authorization and IDFA retrieval (iOS 14+)
+- Fingerprint matching is handled in the Dart layer (no iOS native code involved)
 
 ### Deferred Deep Linking Strategy
 
@@ -101,22 +115,18 @@ The `DeferredDeepLinkService` includes retry logic with exponential backoff (3 a
 - `actions.dart` - Pre-built Custom Actions (has FlutterFlow-specific imports, will show errors in normal IDE)
 - `README.md` - Integration guide for FlutterFlow developers
 
-**Important**: Files in [lib/flutterflow/](lib/flutterflow/) are **examples only** and meant to be copied into FlutterFlow projects. They reference FlutterFlow-specific imports that don't exist in this package.
-
-**Key Documentation**:
-- [FLUTTERFLOW_LOCAL_USAGE.md](FLUTTERFLOW_LOCAL_USAGE.md) - How to use SDK locally in FlutterFlow via Git dependency
-- [FLUTTERFLOW_LOCAL_TESTING.md](FLUTTERFLOW_LOCAL_TESTING.md) - Testing guide for FlutterFlow integration
+**Important**: Files in [lib/flutterflow/](lib/flutterflow/) are **examples only** and meant to be copied into FlutterFlow projects. They reference FlutterFlow-specific imports that don't exist in this package. See [lib/flutterflow/README.md](lib/flutterflow/README.md) for the integration walkthrough.
 
 ## Important Implementation Details
 
 ### Authentication
-The SDK uses `Authorization: Bearer <apiKey>` header format (not `X-API-Key`). This was a critical fix documented in [JIRA-SDK-002-SDK.md](JIRA-SDK-002-SDK.md).
+The SDK uses `Authorization: Bearer <apiKey>` header format (not `X-API-Key`).
 
 ### API Response Parsing
-Backend wraps deferred link responses in `{ success: bool, match: {...} }`. The SDK handles both wrapped and flat responses for backward compatibility.
+Backend wraps deferred link responses in `{ success: bool, match: {...} }` on iOS and `{ success: bool, deepLinkData: {...}, linkId, ... }` on Android. `DeferredLinkResponse.fromJson` handles both formats (and a flat fallback) for backward compatibility.
 
-### RouteAction Migration
-v1.0.1 introduced a breaking change moving from named constructors (`RouteAction.goNamed()`) to callback-only pattern (`RouteAction((ctx, data) => ...)`). See [MIGRATION_ROUTE_ACTION.md](MIGRATION_ROUTE_ACTION.md) for migration guide.
+### Deep Link Navigation
+Apps register a single navigation callback via `LinkGravityClient.instance.handleDeepLinks(onNavigate: (path) => ...)`. The SDK resolves shortCodes through `/api/v1/sdk/resolve/<shortCode>` and calls `onNavigate` with the resolved route (plus any incoming query params). Pre-resolved deferred links skip `/resolve` and are passed straight through.
 
 ### Dart Version Compatibility
 - Dart SDK: `>=3.0.0 <4.0.0`
@@ -125,16 +135,14 @@ v1.0.1 introduced a breaking change moving from named constructors (`RouteAction
 
 ### Package Structure
 This is a Flutter plugin package with:
-- Platform channels for Android (Play Install Referrer)
-- iOS plugin registration (no custom native code)
+- Platform channels for Android (Play Install Referrer) and iOS (SKAdNetwork + ATT)
 - Public API exposed through [lib/linkgravity_flutter_sdk.dart](lib/linkgravity_flutter_sdk.dart)
 
 ## Key Documentation Files
 
 - [README.md](README.md) - Main SDK documentation and API reference
-- [DEFERRED_DEEP_LINKING_IMPLEMENTATION.md](DEFERRED_DEEP_LINKING_IMPLEMENTATION.md) - Technical deep dive on deferred deep linking
-- [PRIVACY_DEFERRED_DEEP_LINKING_GUIDE.md](PRIVACY_DEFERRED_DEEP_LINKING_GUIDE.md) - Privacy considerations and fingerprinting details
 - [CHANGELOG.md](CHANGELOG.md) - Version history and breaking changes
+- [lib/flutterflow/README.md](lib/flutterflow/README.md) - FlutterFlow integration guide
 
 ## Common Patterns
 
@@ -152,5 +160,6 @@ This is a Flutter plugin package with:
 
 ### Working with Platform Channels
 - Android: Modify [android/src/main/kotlin/](android/src/main/kotlin/) Kotlin files
+- iOS: Modify [ios/Classes/](ios/Classes/) Swift files (e.g. add a new method case in `LinkGravityFlutterSdkPlugin.swift`)
 - Dart interface: [lib/linkgravity_flutter_sdk_platform_interface.dart](lib/linkgravity_flutter_sdk_platform_interface.dart)
 - Method channel: [lib/linkgravity_flutter_sdk_method_channel.dart](lib/linkgravity_flutter_sdk_method_channel.dart)
