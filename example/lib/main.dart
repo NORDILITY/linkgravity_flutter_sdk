@@ -1,7 +1,24 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:linkgravity_flutter_sdk/linkgravity_flutter_sdk.dart';
+
+final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+final _handledLinks = ValueNotifier<List<String>>(const []);
+
+final _router = GoRouter(
+  routes: [
+    GoRoute(path: '/', builder: (_, __) => const MyHomePage()),
+    GoRoute(
+      path: '/product/:id',
+      builder: (context, state) => ProductDetailPage(
+        productId: state.pathParameters['id'] ?? 'unknown',
+        queryParams: state.uri.queryParameters,
+      ),
+    ),
+  ],
+);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +35,17 @@ void main() async {
     ),
   );
 
+  // Route regular and deferred deep links through go_router.
+  LinkGravityClient.instance.handleDeepLinks(
+    onNavigate: (path) {
+      _handledLinks.value = [..._handledLinks.value, path];
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text('Navigate to: $path')),
+      );
+      _router.go(path);
+    },
+  );
+
   runApp(const MyApp());
 }
 
@@ -26,13 +54,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'LinkGravity SDK Demo',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(),
+      scaffoldMessengerKey: _scaffoldMessengerKey,
+      routerConfig: _router,
     );
   }
 }
@@ -47,31 +76,12 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String? _createdLink;
   String? _attribution;
-  final List<String> _deepLinks = [];
+  int _queuedEvents = 0;
 
   @override
   void initState() {
     super.initState();
-    _setupDeepLinkHandling();
     _loadAttribution();
-  }
-
-  void _setupDeepLinkHandling() {
-    // Use the unified callback so regular and deferred deep links are handled
-    // through the same entry point.
-    LinkGravityClient.instance.handleDeepLinks(
-      onNavigate: (path) {
-        if (!mounted) return;
-
-        setState(() {
-          _deepLinks.add(path);
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Navigate to: $path')),
-        );
-      },
-    );
   }
 
   Future<void> _loadAttribution() async {
@@ -118,15 +128,33 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _trackEvent() async {
-    await LinkGravityClient.instance.trackEvent('button_clicked', {
+    // Custom event name with a small properties payload. The SDK merges
+    // `config.globalMetadata` and auto-attaches install-time UTM params.
+    await LinkGravityClient.instance.trackEvent('demo_button_clicked', {
       'button_id': 'demo_button',
-      'timestamp': DateTime.now().toIso8601String(),
+      'screen': 'home',
+      'clicked_at': DateTime.now().toIso8601String(),
     });
+
+    // Events are batched (default: 20 per batch or every 30s), so this call
+    // only enqueues — use the Flush button to force an immediate send.
+    setState(() => _queuedEvents++);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Event queued ($_queuedEvents pending)')),
+      );
+    }
+  }
+
+  Future<void> _flushEvents() async {
+    await LinkGravityClient.instance.flushEvents();
+    setState(() => _queuedEvents = 0);
 
     if (mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Event tracked!')));
+      ).showSnackBar(const SnackBar(content: Text('Events flushed to backend')));
     }
   }
 
@@ -250,9 +278,22 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     ),
                     const SizedBox(height: 8),
+                    const Text(
+                      'Creates a short link that deep links to the in-app '
+                      '/product/123 page (with ?ref=demo). Tapping the '
+                      'generated link — or receiving it as a deferred match '
+                      'after install — routes through go_router to the '
+                      'Product Details page below.',
+                    ),
+                    const SizedBox(height: 12),
                     ElevatedButton(
                       onPressed: _createLink,
                       child: const Text('Create Demo Link'),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: () => context.go('/product/123?ref=demo'),
+                      child: const Text('Preview /product/123'),
                     ),
                     if (_createdLink != null) ...[
                       const SizedBox(height: 8),
@@ -279,13 +320,30 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
+                    const Text(
+                      'Track Event enqueues a "demo_button_clicked" event via '
+                      'LinkGravityClient.trackEvent(). The SDK batches events '
+                      '(20 per batch or every 30s) and auto-attaches install '
+                      'UTM for attribution. Use Flush to force an immediate '
+                      'POST to /api/v1/events.',
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         ElevatedButton(
                           onPressed: _trackEvent,
                           child: const Text('Track Event'),
                         ),
-                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: _queuedEvents == 0 ? null : _flushEvents,
+                          child: Text(
+                            _queuedEvents == 0
+                                ? 'Flush (queue empty)'
+                                : 'Flush ($_queuedEvents queued)',
+                          ),
+                        ),
                         ElevatedButton(
                           onPressed: _trackConversion,
                           child: const Text('Track Conversion'),
@@ -335,13 +393,95 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    if (_deepLinks.isEmpty)
-                      const Text('No deep links handled yet')
-                    else
-                      ..._deepLinks.map((link) => Text('* $link')),
+                    ValueListenableBuilder<List<String>>(
+                      valueListenable: _handledLinks,
+                      builder: (_, links, __) {
+                        if (links.isEmpty) {
+                          return const Text('No deep links handled yet');
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (final link in links) Text('* $link'),
+                          ],
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ProductDetailPage extends StatelessWidget {
+  final String productId;
+  final Map<String, String> queryParams;
+
+  const ProductDetailPage({
+    super.key,
+    required this.productId,
+    required this.queryParams,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: Text('Product $productId'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/'),
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Product Details',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Product ID: $productId'),
+                    const SizedBox(height: 12),
+                    Text(
+                      'This screen is the deep-link target for the demo '
+                      'short link. It was reached via go_router after the '
+                      'SDK resolved the incoming link to /product/$productId.',
+                    ),
+                    if (queryParams.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Query parameters',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      for (final entry in queryParams.entries)
+                        Text('  ${entry.key}: ${entry.value}'),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => context.go('/'),
+              child: const Text('Back to Home'),
             ),
           ],
         ),
