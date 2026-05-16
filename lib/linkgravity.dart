@@ -17,7 +17,7 @@
 /// ## Quick Start
 ///
 /// ```dart
-/// import 'package:linkgravity_flutter_sdk/linkgravity_flutter_sdk.dart';
+/// import 'package:linkgravity_flutter_sdk/linkgravity.dart';
 ///
 /// // Initialize SDK
 /// final linkGravity = await LinkGravityClient.initialize(

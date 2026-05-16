@@ -4,7 +4,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:linkgravity_flutter_sdk/linkgravity_flutter_sdk.dart';
+import 'package:linkgravity_flutter_sdk/linkgravity.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:linkgravity_flutter_sdk/linkgravity_flutter_sdk.dart';
+import 'package:linkgravity_flutter_sdk/linkgravity.dart';
 
 final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 final _handledLinks = ValueNotifier<List<String>>(const []);

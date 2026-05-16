@@ -12,7 +12,7 @@
 library linkgravity_flutterflow;
 
 import 'dart:convert';
-import '../linkgravity_flutter_sdk.dart';
+import '../linkgravity.dart';
 
 /// Initialize LinkGravity SDK
 ///

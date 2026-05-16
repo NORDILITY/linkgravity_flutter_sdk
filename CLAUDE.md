@@ -136,7 +136,7 @@ Apps register a single navigation callback via `LinkGravityClient.instance.handl
 ### Package Structure
 This is a Flutter plugin package with:
 - Platform channels for Android (Play Install Referrer) and iOS (SKAdNetwork + ATT)
-- Public API exposed through [lib/linkgravity_flutter_sdk.dart](lib/linkgravity_flutter_sdk.dart)
+- Public API exposed through [lib/linkgravity.dart](lib/linkgravity.dart)
 
 ## Key Documentation Files
 
@@ -147,19 +147,20 @@ This is a Flutter plugin package with:
 ## Common Patterns
 
 ### Adding a New Service Method
-1. Add method to appropriate service in [lib/src/services/](lib/src/services/)
+1. Add method to appropriate servilinkgravity.dartb/src/linkgravity.dart
 2. Expose through LinkGravityClient in [lib/src/linkgravity_client.dart](lib/src/linkgravity_client.dart)
-3. Export in [lib/linkgravity_flutter_sdk.dart](lib/linkgravity_flutter_sdk.dart) if public API
+3. Export in [lib/linkgravity.dart](lib/linkgravity.dart) if public API
 4. Add unit tests in [test/services/](test/services/)
 
 ### Adding a New Model
 1. Create model file in [lib/src/models/](lib/src/models/)
 2. Include `fromJson()`, `toJson()`, and `copyWith()` methods
-3. Export in [lib/linkgravity_flutter_sdk.dart](lib/linkgravity_flutter_sdk.dart)
+3. Export in [lib/linkgravity.dart](lib/linkgravity.dart)
 4. Add unit tests in [test/models/](test/models/)
 
 ### Working with Platform Channels
 - Android: Modify [android/src/main/kotlin/](android/src/main/kotlin/) Kotlin files
 - iOS: Modify [ios/Classes/](ios/Classes/) Swift files (e.g. add a new method case in `LinkGravityFlutterSdkPlugin.swift`)
-- Dart interface: [lib/linkgravity_flutter_sdk_platform_interface.dart](lib/linkgravity_flutter_sdk_platform_interface.dart)
+- Dart interface: linkgravity.dart_platflinkgravity.dartgravity_flutter_sdk_platform_interface.dart)
 - Method channel: [lib/linkgravity_flutter_sdk_method_channel.dart](lib/linkgravity_flutter_sdk_method_channel.dart)
+linkgravity.dartlinkgravity.dart
