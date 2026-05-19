@@ -21,7 +21,7 @@ flutter pub get
 ### Prerequisite
 
 Your app needs to be created in Android Console and or the apple app store (they do not have to be released yet), to get keys for the respective OS to verify the links.
-iOS see [setup universal links](https://docs.flutter.dev/cookbook/navigation/set-up-universal-links)
+iOS see [setup universal links](https://linkgravity.dartvigation/set-up-universal-links)
 Android see [setup app links](https://docs.flutter.dev/cookbook/navigation/set-up-app-links).
 
 For Android you do not need to have the App in Console, you can test with this workaroung: Goto app settings of your App -> open by default -> add link -> choose the link gravity link schema.
@@ -29,7 +29,7 @@ For Android you do not need to have the App in Console, you can test with this w
 ### 1. Initialize 
 
 ```dart
-import 'package:linkgravity_flutter_sdk/linkgravity_flutter_sdk.dart';
+import 'package:linkgravity_flutter_sdk/linkgravity.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

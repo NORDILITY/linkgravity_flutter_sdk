@@ -56,7 +56,7 @@ dependencies:
 
 **Action 1: Initialize SDK (in main.dart final action)**
 ```dart
-import 'package:linkgravity_flutter_sdk/linkgravity_flutter_sdk.dart';
+import 'package:linkgravity_flutter_sdk/linkgravity.dart';
 
 Future<bool> initializeLinkGravity() async {
   await LinkGravityClient.initialize(

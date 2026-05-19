@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:linkgravity_flutter_sdk/linkgravity_flutter_sdk.dart';
+import 'package:linkgravity_flutter_sdk/linkgravity.dart';
 
 // Generate mocks with: flutter pub run build_runner build
 void main() {
