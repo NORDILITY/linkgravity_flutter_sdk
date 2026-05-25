@@ -355,6 +355,10 @@ class LinkGravityClient {
 
         _deepLink.initialLink = link;
         _deepLink.initialLinkResolved = isResolved;
+        // Click was already counted when the user clicked the short URL in
+        // the browser before installing — don't tag /resolve with a click
+        // source on first launch.
+        _deepLink.initialLinkFromDeferred = true;
 
         if (isResolved) {
           _deepLink.resolvedLinkController.add(link);
@@ -471,9 +475,12 @@ class LinkGravityClient {
 
   /// Resolve a shortCode to its target route.
   ///
-  /// Pass [source] to tell the backend where the click came from (e.g.
-  /// `ios_universal_link`, `android_app_link`) so it can count clicks that
-  /// bypass the redirect server.
+  /// Pass [source] (`ios_universal_link` | `android_app_link`) when the
+  /// link bypassed the redirect server, so the backend can count the click.
+  /// Pass [cid] instead when the redirect server already counted it and
+  /// threaded the click id through to the app via `?lgr_cid=...`.
+  /// Pass [fingerprint] alongside [source] so the backend can dedupe repeat
+  /// /resolve calls from the same device.
   ///
   /// Returns the raw API response map with `success`, `route` (plain path),
   /// `destination`, and `utm` fields, or null if the lookup fails.
@@ -481,6 +488,8 @@ class LinkGravityClient {
     String shortCode, {
     String? platform,
     String? source,
+    String? cid,
+    String? fingerprint,
   }) async {
     _ensureInitialized();
 
@@ -488,13 +497,15 @@ class LinkGravityClient {
     platform ??= await _fingerprint.getPlatformName();
 
     LinkGravityLogger.info(
-      'Resolving shortCode: $shortCode (platform: $platform, source: ${source ?? "none"})',
+      'Resolving shortCode: $shortCode (platform: $platform, source: ${source ?? "none"}, cid: ${cid ?? "none"})',
     );
 
     final result = await _api.resolveShortCode(
       shortCode,
       platform: platform,
       source: source,
+      cid: cid,
+      fingerprint: fingerprint,
     );
 
     if (result != null && result['success'] == true) {
@@ -506,6 +517,7 @@ class LinkGravityClient {
           'destination': result['destination'],
           'platform': platform,
           if (source != null) 'source': source,
+          if (cid != null) 'cid': cid,
         });
       }
 
@@ -556,12 +568,18 @@ class LinkGravityClient {
     final coldLink = _deepLink.initialLink;
     if (coldLink != null) {
       final coldResolved = _deepLink.initialLinkResolved;
+      final coldFromDeferred = _deepLink.initialLinkFromDeferred;
       _deepLink.initialLink = null;
       _deepLink.initialLinkResolved = false;
+      _deepLink.initialLinkFromDeferred = false;
       // Small delay so the app's router is mounted before we navigate.
       Future.delayed(
         const Duration(milliseconds: 500),
-        () => processDeepLink(coldLink, isResolved: coldResolved),
+        () => processDeepLink(
+          coldLink,
+          isResolved: coldResolved,
+          isFromDeferredMatch: coldFromDeferred,
+        ),
       );
     }
   }
@@ -581,7 +599,16 @@ class LinkGravityClient {
   /// Set [isResolved] to true to skip the /resolve call and navigate directly
   /// to [link] (used for deferred deep link matches that return a pre-resolved
   /// route).
-  Future<void> processDeepLink(String link, {bool isResolved = false}) async {
+  ///
+  /// Set [isFromDeferredMatch] to true when the link originates from a
+  /// deferred deep link match. The click was already counted server-side on
+  /// the web before install, so /resolve must not be tagged with a click
+  /// source.
+  Future<void> processDeepLink(
+    String link, {
+    bool isResolved = false,
+    bool isFromDeferredMatch = false,
+  }) async {
     _ensureInitialized();
     if (_globalOnNavigate == null) {
       LinkGravityLogger.warning(
@@ -594,8 +621,17 @@ class LinkGravityClient {
     final (path, params) = _splitLink(link);
     if (path.isEmpty || path == '/') return;
 
+    // The redirect server tags Stage-1 → cname redirects with `lgr_cid` so the
+    // app can correlate to the existing Click. Pull it out of the incoming
+    // params before they're forwarded; passing it through to the host app's
+    // router would leak an internal id.
+    final lgrCid = params['lgr_cid'];
+    final forwardedParams = lgrCid == null
+        ? params
+        : (Map<String, String>.from(params)..remove('lgr_cid'));
+
     if (isResolved) {
-      final finalPath = _appendQueryParams(path, params);
+      final finalPath = _appendQueryParams(path, forwardedParams);
       LinkGravityLogger.info('✅ Pre-resolved, navigating: $finalPath');
       _globalOnNavigate!(finalPath);
       return;
@@ -605,25 +641,63 @@ class LinkGravityClient {
     if (segments.isEmpty) return;
     final shortCode = segments.last;
 
-    // http(s) links arriving here were intercepted by the OS as Universal/App
-    // Links — they bypass the redirect server, so flag the source for the
-    // backend to count the click.
     final isHttp = link.startsWith('http://') || link.startsWith('https://');
-    final source = isHttp
-        ? (Platform.isIOS ? 'ios_universal_link' : 'android_app_link')
+
+    // Host gating: when `config.linkHosts` is non-empty, only http(s) URLs
+    // whose host is in the list are resolved against the backend. Foreign
+    // hosts are passed straight to the router — they're not our short links.
+    if (isHttp && config.linkHosts.isNotEmpty) {
+      final host = Uri.tryParse(link)?.host ?? '';
+      if (!config.linkHosts.contains(host)) {
+        LinkGravityLogger.info('🔀 Foreign host, pass-through: $link');
+        _globalOnNavigate?.call(link);
+        return;
+      }
+    }
+
+    // Click-attribution discriminator: only one of source / cid is set.
+    //   - deferred match → already counted before install, send neither
+    //   - lgr_cid present → server already counted, send cid for correlation
+    //   - http(s) link → server bypassed by the OS, send source
+    //   - custom scheme → server already counted (smart-redirect page), send
+    //     neither
+    String? source;
+    String? cid;
+    if (isFromDeferredMatch) {
+      // intentionally both null
+    } else if (lgrCid != null) {
+      cid = lgrCid;
+    } else if (isHttp) {
+      final platformLabel = config.platformOverride ??
+          (Platform.isIOS ? 'ios' : 'android');
+      source = platformLabel == 'ios'
+          ? 'ios_universal_link'
+          : 'android_app_link';
+    }
+
+    // Fingerprint is only meaningful for the source-counting path (used by
+    // the backend's 5-minute dedup key). Skip the device-info round-trip
+    // otherwise.
+    final fingerprint = source != null
+        ? await _fingerprint.generateFingerprint()
         : null;
 
     LinkGravityLogger.info('🔍 Resolving: $shortCode');
 
     try {
-      final result = await resolveShortCode(shortCode, source: source);
+      final result = await resolveShortCode(
+        shortCode,
+        source: source,
+        cid: cid,
+        fingerprint: fingerprint,
+      );
 
       String finalPath;
       if (result != null && result['success'] == true) {
         // Backend returns `route` as a plain path (e.g. "/details") — use it
-        // verbatim and append any incoming query params.
+        // verbatim and append any incoming query params (lgr_cid stripped).
         final route = result['route'] as String;
-        finalPath = _appendQueryParams(route, params);
+        finalPath = _appendQueryParams(route, forwardedParams);
 
         final utm = result['utm'] as Map<String, dynamic>?;
         if (utm != null) {
@@ -633,7 +707,7 @@ class LinkGravityClient {
         }
       } else {
         LinkGravityLogger.warning('⚠️ Resolution failed for: $shortCode');
-        finalPath = _appendQueryParams(path, params);
+        finalPath = _appendQueryParams(path, forwardedParams);
       }
 
       LinkGravityLogger.info('🚀 Navigating: $finalPath');

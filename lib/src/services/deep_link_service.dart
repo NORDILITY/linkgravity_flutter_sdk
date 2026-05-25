@@ -28,6 +28,11 @@ class DeepLinkService {
   /// True when [initialLink] is already resolved and should skip /resolve.
   bool initialLinkResolved = false;
 
+  /// True when [initialLink] came from a deferred deep link match (the click
+  /// was already counted server-side on the web), so /resolve must not be
+  /// tagged with a click source.
+  bool initialLinkFromDeferred = false;
+
   bool _initialized = false;
   StreamSubscription<Uri>? _subscription;
 

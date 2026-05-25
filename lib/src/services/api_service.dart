@@ -509,30 +509,29 @@ class ApiService {
   /// - [platform]: Platform name ('android' or 'ios')
   /// - [source]: Where the link was opened from. Lets the backend count
   ///   clicks that bypass the redirect server (e.g. `ios_universal_link`,
-  ///   `android_app_link`).
+  ///   `android_app_link`). Mutually exclusive with [cid].
+  /// - [cid]: Click id minted by the redirect server. Pass when the link
+  ///   the SDK received carries `?lgr_cid=...` so the backend correlates to
+  ///   the existing Click instead of creating a duplicate.
+  /// - [fingerprint]: Device fingerprint used by the backend to dedupe
+  ///   repeated /resolve calls from the same device within a short window.
+  ///   Only meaningful when [source] is set.
   ///
   /// Returns a map with:
   /// - success: true/false
   /// - route: The target route (e.g., '/hidden?ref=Test13')
   /// - destination: The original long URL
   /// - utm: UTM parameters object
-  ///
-  /// Example:
-  /// ```dart
-  /// final result = await api.resolveShortCode('tappick-test', 'android');
-  /// if (result != null && result['success'] == true) {
-  ///   final route = result['route']; // '/hidden?ref=Test13'
-  ///   // Navigate to route
-  /// }
-  /// ```
   Future<Map<String, dynamic>?> resolveShortCode(
     String shortCode, {
     String platform = 'android',
     String? source,
+    String? cid,
+    String? fingerprint,
   }) async {
     try {
       LinkGravityLogger.debug(
-        'Resolving shortCode: $shortCode (platform: $platform, source: ${source ?? "none"})',
+        'Resolving shortCode: $shortCode (platform: $platform, source: ${source ?? "none"}, cid: ${cid ?? "none"})',
       );
 
       final response = await _get(
@@ -540,6 +539,8 @@ class ApiService {
         queryParams: {
           'platform': platform,
           if (source != null) 'source': source,
+          if (cid != null) 'cid': cid,
+          if (fingerprint != null) 'fp': fingerprint,
         },
       );
 
