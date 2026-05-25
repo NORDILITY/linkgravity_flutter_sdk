@@ -59,6 +59,14 @@ class LinkGravityConfig {
   /// (legacy behavior).
   final List<String> linkHosts;
 
+  /// Test seam: forces the SDK to behave as if running on the given platform
+  /// when computing the click-attribution `source` query parameter.
+  ///
+  /// Accepted values: `'ios'`, `'android'`, or `null` (default — use
+  /// `Platform.isIOS` / `Platform.isAndroid`). Production code should leave
+  /// this null; the host platform is the source of truth.
+  final String? platformOverride;
+
   LinkGravityConfig({
     this.enableAnalytics = true,
     this.enableDeepLinking = true,
@@ -72,6 +80,7 @@ class LinkGravityConfig {
     this.globalMetadata,
     this.debugSimulateFirstLaunch = false,
     this.linkHosts = const [],
+    this.platformOverride,
   }) {
     // Validate configuration
     assert(
@@ -98,6 +107,7 @@ class LinkGravityConfig {
     Map<String, dynamic>? globalMetadata,
     bool? debugSimulateFirstLaunch,
     List<String>? linkHosts,
+    String? platformOverride,
   }) {
     return LinkGravityConfig(
       enableAnalytics: enableAnalytics ?? this.enableAnalytics,
@@ -113,6 +123,7 @@ class LinkGravityConfig {
       debugSimulateFirstLaunch:
           debugSimulateFirstLaunch ?? this.debugSimulateFirstLaunch,
       linkHosts: linkHosts ?? this.linkHosts,
+      platformOverride: platformOverride ?? this.platformOverride,
     );
   }
 

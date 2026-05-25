@@ -29,7 +29,10 @@ void main() {
 
   // Builds a client whose /resolve calls are captured into
   // `capturedResolveCalls` and answered with a canned 200.
-  LinkGravityClient buildClient({List<String> linkHosts = const []}) {
+  LinkGravityClient buildClient({
+    List<String> linkHosts = const [],
+    String? platformOverride,
+  }) {
     capturedResolveCalls = [];
 
     final mockHttpClient = MockClient((request) async {
@@ -68,6 +71,7 @@ void main() {
       config: LinkGravityConfig(
         enableAnalytics: false,
         linkHosts: linkHosts,
+        platformOverride: platformOverride,
       ),
       api: api,
       deepLink: deepLinkService,
@@ -236,23 +240,31 @@ void main() {
 
   group('Source value by platform', () {
     test('iOS: source=ios_universal_link', () async {
-      final client = buildClient(linkHosts: ['lg.example']);
-      // TODO: enable once LinkGravityConfig.platformOverride lands.
+      final client = buildClient(
+        linkHosts: ['lg.example'],
+        platformOverride: 'ios',
+      );
+
       await processAndAwait(client, 'https://lg.example/abc');
+
       expect(
         capturedResolveCalls.single.queryParameters['source'],
         'ios_universal_link',
       );
-    }, skip: 'enable once platformOverride test hook lands');
+    });
 
     test('Android: source=android_app_link', () async {
-      final client = buildClient(linkHosts: ['lg.example']);
-      // TODO: enable once LinkGravityConfig.platformOverride lands.
+      final client = buildClient(
+        linkHosts: ['lg.example'],
+        platformOverride: 'android',
+      );
+
       await processAndAwait(client, 'https://lg.example/abc');
+
       expect(
         capturedResolveCalls.single.queryParameters['source'],
         'android_app_link',
       );
-    }, skip: 'enable once platformOverride test hook lands');
+    });
   });
 }
