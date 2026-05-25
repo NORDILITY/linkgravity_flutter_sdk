@@ -50,6 +50,15 @@ class LinkGravityConfig {
   /// for deferred links on every launch, potentially consuming API limits.
   final bool debugSimulateFirstLaunch;
 
+  /// Hosts that this SDK should treat as LinkGravity short-link hosts.
+  ///
+  /// When non-empty, `processDeepLink` only calls `/resolve` for incoming
+  /// http(s) URLs whose host is in this list. URLs with foreign hosts are
+  /// passed straight through to `onNavigate` so the app router can handle
+  /// them. When the list is empty (default), every http(s) link is resolved
+  /// (legacy behavior).
+  final List<String> linkHosts;
+
   LinkGravityConfig({
     this.enableAnalytics = true,
     this.enableDeepLinking = true,
@@ -62,6 +71,7 @@ class LinkGravityConfig {
     this.trackLifecycleEvents = true,
     this.globalMetadata,
     this.debugSimulateFirstLaunch = false,
+    this.linkHosts = const [],
   }) {
     // Validate configuration
     assert(
@@ -87,6 +97,7 @@ class LinkGravityConfig {
     bool? trackLifecycleEvents,
     Map<String, dynamic>? globalMetadata,
     bool? debugSimulateFirstLaunch,
+    List<String>? linkHosts,
   }) {
     return LinkGravityConfig(
       enableAnalytics: enableAnalytics ?? this.enableAnalytics,
@@ -101,6 +112,7 @@ class LinkGravityConfig {
       globalMetadata: globalMetadata ?? this.globalMetadata,
       debugSimulateFirstLaunch:
           debugSimulateFirstLaunch ?? this.debugSimulateFirstLaunch,
+      linkHosts: linkHosts ?? this.linkHosts,
     );
   }
 
