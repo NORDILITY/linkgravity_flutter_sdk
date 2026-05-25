@@ -471,11 +471,16 @@ class LinkGravityClient {
 
   /// Resolve a shortCode to its target route.
   ///
+  /// Pass [source] to tell the backend where the click came from (e.g.
+  /// `ios_universal_link`, `android_app_link`) so it can count clicks that
+  /// bypass the redirect server.
+  ///
   /// Returns the raw API response map with `success`, `route` (plain path),
   /// `destination`, and `utm` fields, or null if the lookup fails.
   Future<Map<String, dynamic>?> resolveShortCode(
     String shortCode, {
     String? platform,
+    String? source,
   }) async {
     _ensureInitialized();
 
@@ -483,10 +488,14 @@ class LinkGravityClient {
     platform ??= await _fingerprint.getPlatformName();
 
     LinkGravityLogger.info(
-      'Resolving shortCode: $shortCode (platform: $platform)',
+      'Resolving shortCode: $shortCode (platform: $platform, source: ${source ?? "none"})',
     );
 
-    final result = await _api.resolveShortCode(shortCode, platform: platform);
+    final result = await _api.resolveShortCode(
+      shortCode,
+      platform: platform,
+      source: source,
+    );
 
     if (result != null && result['success'] == true) {
       // Track shortCode resolution event
@@ -496,6 +505,7 @@ class LinkGravityClient {
           'route': result['route'],
           'destination': result['destination'],
           'platform': platform,
+          if (source != null) 'source': source,
         });
       }
 
@@ -595,10 +605,18 @@ class LinkGravityClient {
     if (segments.isEmpty) return;
     final shortCode = segments.last;
 
+    // http(s) links arriving here were intercepted by the OS as Universal/App
+    // Links — they bypass the redirect server, so flag the source for the
+    // backend to count the click.
+    final isHttp = link.startsWith('http://') || link.startsWith('https://');
+    final source = isHttp
+        ? (Platform.isIOS ? 'ios_universal_link' : 'android_app_link')
+        : null;
+
     LinkGravityLogger.info('🔍 Resolving: $shortCode');
 
     try {
-      final result = await resolveShortCode(shortCode);
+      final result = await resolveShortCode(shortCode, source: source);
 
       String finalPath;
       if (result != null && result['success'] == true) {

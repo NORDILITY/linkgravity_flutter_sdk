@@ -507,6 +507,9 @@ class ApiService {
   /// Parameters:
   /// - [shortCode]: The short code to resolve (e.g., 'tappick-test')
   /// - [platform]: Platform name ('android' or 'ios')
+  /// - [source]: Where the link was opened from. Lets the backend count
+  ///   clicks that bypass the redirect server (e.g. `ios_universal_link`,
+  ///   `android_app_link`).
   ///
   /// Returns a map with:
   /// - success: true/false
@@ -525,15 +528,19 @@ class ApiService {
   Future<Map<String, dynamic>?> resolveShortCode(
     String shortCode, {
     String platform = 'android',
+    String? source,
   }) async {
     try {
       LinkGravityLogger.debug(
-        'Resolving shortCode: $shortCode (platform: $platform)',
+        'Resolving shortCode: $shortCode (platform: $platform, source: ${source ?? "none"})',
       );
 
       final response = await _get(
         '/api/v1/sdk/resolve/$shortCode',
-        queryParams: {'platform': platform},
+        queryParams: {
+          'platform': platform,
+          if (source != null) 'source': source,
+        },
       );
 
       if (response['success'] == true) {
