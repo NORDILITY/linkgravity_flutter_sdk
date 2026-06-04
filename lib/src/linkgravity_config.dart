@@ -50,6 +50,23 @@ class LinkGravityConfig {
   /// for deferred links on every launch, potentially consuming API limits.
   final bool debugSimulateFirstLaunch;
 
+  /// Hosts that this SDK should treat as LinkGravity short-link hosts.
+  ///
+  /// When non-empty, `processDeepLink` only calls `/resolve` for incoming
+  /// http(s) URLs whose host is in this list. URLs with foreign hosts are
+  /// passed straight through to `onNavigate` so the app router can handle
+  /// them. When the list is empty (default), every http(s) link is resolved
+  /// (legacy behavior).
+  final List<String> linkHosts;
+
+  /// Test seam: forces the SDK to behave as if running on the given platform
+  /// when computing the click-attribution `source` query parameter.
+  ///
+  /// Accepted values: `'ios'`, `'android'`, or `null` (default — use
+  /// `Platform.isIOS` / `Platform.isAndroid`). Production code should leave
+  /// this null; the host platform is the source of truth.
+  final String? platformOverride;
+
   LinkGravityConfig({
     this.enableAnalytics = true,
     this.enableDeepLinking = true,
@@ -62,6 +79,8 @@ class LinkGravityConfig {
     this.trackLifecycleEvents = true,
     this.globalMetadata,
     this.debugSimulateFirstLaunch = false,
+    this.linkHosts = const [],
+    this.platformOverride,
   }) {
     // Validate configuration
     assert(
@@ -87,6 +106,8 @@ class LinkGravityConfig {
     bool? trackLifecycleEvents,
     Map<String, dynamic>? globalMetadata,
     bool? debugSimulateFirstLaunch,
+    List<String>? linkHosts,
+    String? platformOverride,
   }) {
     return LinkGravityConfig(
       enableAnalytics: enableAnalytics ?? this.enableAnalytics,
@@ -101,6 +122,8 @@ class LinkGravityConfig {
       globalMetadata: globalMetadata ?? this.globalMetadata,
       debugSimulateFirstLaunch:
           debugSimulateFirstLaunch ?? this.debugSimulateFirstLaunch,
+      linkHosts: linkHosts ?? this.linkHosts,
+      platformOverride: platformOverride ?? this.platformOverride,
     );
   }
 
