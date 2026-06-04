@@ -237,6 +237,10 @@ flutter test
 flutter analyze
 ```
 
+### Release
+
+Test first with `dart pub publish --dry-run` then run `dart pub publish`
+
 ## License
 
 MIT License — see [LICENSE](LICENSE) for details.
