@@ -184,36 +184,17 @@ class ApiService {
   // LINK MANAGEMENT
   // ============================================================================
 
-  /// Create a new LinkGravity
-  /// POST /api/v1/links
-  Future<LinkGravity> createLink(LinkParams params) async {
-    if (!params.validate()) {
-      throw ApiException('Invalid link parameters');
-    }
-
-    final response = await _post('/api/v1/links', params.toJson());
-
-    if (response['success'] == true && response['data'] != null) {
-      return LinkGravity.fromJson(response['data'] as Map<String, dynamic>);
-    }
-
-    // Handle nested link object (common API pattern)
-    if (response['link'] != null) {
-      return LinkGravity.fromJson(response['link'] as Map<String, dynamic>);
-    }
-
-    throw ApiException('Failed to create link: ${response['message']}');
-  }
-
   /// Create a dynamic (share) link via SDK using Public API Key
-  /// POST /api/sdk/links
+  /// POST /api/v1/sdk/links
   Future<LinkGravity> createDynamicLink(LinkParams params) async {
     if (!params.validate()) {
       throw ApiException('Invalid link parameters');
     }
 
-    // Use /api/sdk/links endpoint which supports Public API Key + Rate Limiting
-    final response = await _post('/api/sdk/links', params.toJson());
+    // Use /api/v1/sdk/links, which accepts a public API key and applies the domain
+    // whitelist and rate limit. The backend mounts the SDK router at /api/v1/sdk; the
+    // path here was missing the /v1 and had never resolved — every call 404'd.
+    final response = await _post('/api/v1/sdk/links', params.toJson());
 
     // Handle response
     if (response['link'] != null) {
@@ -354,23 +335,6 @@ class ApiService {
   }
 
 
-  /// Track SDK event
-  /// POST /api/v1/sdk/events
-  Future<void> trackSdkEvent({
-    required String name,
-    Map<String, dynamic>? properties,
-    String? linkId,
-    String? fingerprint,
-    String? deviceId,
-  }) async {
-    await _post('/api/v1/sdk/events', {
-      'name': name,
-      if (properties != null) 'properties': properties,
-      if (linkId != null) 'linkId': linkId,
-      if (fingerprint != null) 'fingerprint': fingerprint,
-      if (deviceId != null) 'deviceId': deviceId,
-    });
-  }
 
   /// Track conversion (purchase, signup, etc.)
   /// POST /api/v1/sdk/conversions
@@ -457,15 +421,6 @@ class ApiService {
     await _post('/api/v1/events', event.toJson());
   }
 
-  // ============================================================================
-  // CLICK TRACKING
-  // ============================================================================
-
-  /// Track link click
-  /// This is typically handled by the backend redirect, but can be called manually
-  Future<void> trackClick(String linkId, Map<String, dynamic> data) async {
-    await _post('/api/v1/links/$linkId/click', data);
-  }
 
   // ============================================================================
   // DEFERRED DEEP LINKING
