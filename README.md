@@ -9,7 +9,7 @@ A Flutter SDK for deferred deep linking, link management, and attribution. Works
 
 ```yaml
 dependencies:
-  linkgravity_flutter_sdk: ^0.2.0
+  linkgravity_flutter_sdk: ^0.4.0
 ```
 
 ```bash
