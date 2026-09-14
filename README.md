@@ -86,9 +86,8 @@ final link = await LinkGravityClient.instance.createLink(
 print('Short URL: ${link.shortUrl}');
 
 // Other operations
-final fetched = await LinkGravityClient.instance.getLink(link.id);
-final updated = await LinkGravityClient.instance.updateLink(link.id, LinkParams(longUrl: 'https://example.com/new'));
-await LinkGravityClient.instance.deleteLink(link.id);
+// Links are managed from the LinkGravity dashboard. The SDK creates them; it does not
+// list, edit or delete them — see the note in the API reference below.
 ```
 
 ## Track Events
@@ -182,10 +181,11 @@ await LinkGravityClient.initialize(
 | Method | Description |
 |--------|-------------|
 | `createLink(LinkParams)` | Create a short link |
-| `getLink(String)` | Get link by ID |
-| `getLinks({limit, offset, search})` | List links |
-| `updateLink(String, LinkParams)` | Update a link |
-| `deleteLink(String)` | Delete a link |
+
+Reading, editing and deleting links is deliberately not part of the SDK. The key an app
+ships with is a **public** key, extractable from the binary, so it can create links but
+must not be able to enumerate, rewrite or delete a project's existing ones. Use the
+dashboard for that.
 
 ### Deep Linking
 

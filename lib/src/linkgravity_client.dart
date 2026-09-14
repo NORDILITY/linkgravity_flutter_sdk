@@ -350,6 +350,24 @@ class LinkGravityClient {
           ...?match.params,
         });
 
+        // Persist what the match told us, so getAttribution() has something to return.
+        //
+        // Nothing wrote this store before, and the only reader fetched from an endpoint
+        // that does not exist — so getAttribution() returned null in every version, for
+        // every caller, including the FlutterFlow action wrapping it. The data was always
+        // right here and simply discarded.
+        await _storage.saveAttribution(
+          AttributionData(
+            id: match.linkId ?? match.shortCode ?? 'deferred',
+            linkId: match.linkId,
+            shortCode: match.shortCode,
+            deepLinkPath: match.deepLinkUrl,
+            deepLinkParams: match.params?.map((k, v) => MapEntry(k, v.toString())),
+            isDeferred: true,
+            firstOpenedAt: DateTime.now(),
+          ),
+        );
+
         final link = match.deepLinkUrl!;
         final isResolved = match.isResolved ?? false;
 
@@ -431,33 +449,15 @@ class LinkGravityClient {
     return link;
   }
 
-  /// Get a specific link by ID
-  Future<LinkGravity> getLink(String linkId) async {
-    _ensureInitialized();
-    return await _api.getLink(linkId);
-  }
-
-  /// Get all links
-  Future<List<LinkGravity>> getLinks({
-    int? limit,
-    int? offset,
-    String? search,
-  }) async {
-    _ensureInitialized();
-    return await _api.getLinks(limit: limit, offset: offset, search: search);
-  }
-
-  /// Update an existing link
-  Future<LinkGravity> updateLink(String linkId, LinkParams params) async {
-    _ensureInitialized();
-    return await _api.updateLink(linkId, params);
-  }
-
-  /// Delete a link
-  Future<void> deleteLink(String linkId) async {
-    _ensureInitialized();
-    await _api.deleteLink(linkId);
-  }
+  // getLink / getLinks / updateLink / deleteLink were removed in 0.4.0.
+  //
+  // They called /api/v1/links*, which is authenticated by session JWT, so an API key could
+  // never pass and all four returned 401 in every released version. They are not coming
+  // back in this form: the credential an app holds is a *public* key compiled into its
+  // binary and extractable from it, and "list, rewrite and delete every link in this
+  // project" is a far larger grant than createLink — which is additive, rate-limited and
+  // domain-whitelisted. Managing links belongs to the dashboard, or to a server-side
+  // integration holding a secret key.
 
   // ============================================================================
   // DEEP LINKING
@@ -839,17 +839,20 @@ class LinkGravityClient {
   Future<AttributionData?> getAttribution() async {
     _ensureInitialized();
 
-    // Check cache first
-    var attribution = await _storage.getAttribution();
-    if (attribution != null) {
-      LinkGravityLogger.debug('Returning cached attribution');
-      return attribution;
-    }
+    // Cache-only, and the cache is written by the deferred-match flow above.
+    //
+    // This used to fall back to GET /api/v1/sdk/deferred-link, which is not a route — and
+    // could not have worked if it were: it matches on `DeferredLink.fingerprint`, which the
+    // redirect server derives from HTTP request data, against a hash this SDK computes on
+    // the device from device attributes. Two unrelated values that can never be equal.
+    // Probabilistic matching lives in /sdk/match, which the deferred flow already uses.
+    final attribution = await _storage.getAttribution();
 
-    // Fetch from backend
-    attribution = await _api.getDeferredLink(_deviceFingerprint!);
-    if (attribution != null) {
-      await _storage.saveAttribution(attribution);
+    if (attribution == null) {
+      LinkGravityLogger.debug(
+        'No attribution stored — this install was organic, or the deferred match has not '
+        'run yet (it runs once, on first launch after install).',
+      );
     }
 
     return attribution;
