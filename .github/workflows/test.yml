@@ -30,3 +30,6 @@ jobs:
 
       - name: Run tests
         run: flutter test
+
+      - name: Verify the package is publishable
+        run: flutter pub publish --dry-run
