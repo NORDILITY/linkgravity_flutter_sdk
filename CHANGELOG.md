@@ -5,6 +5,22 @@ All notable changes to the LinkGravity Flutter SDK will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-14
+
+### Removed
+- **Breaking:** `getLink`, `getLinks`, `updateLink`, `deleteLink`. They called `/api/v1/links*`, which is authenticated by session JWT, so an API key could never pass — all four returned 401 in every released version. Link management stays in the dashboard: the key an app ships with is a public key, extractable from the binary.
+- `ApiService.createLink`, `trackSdkEvent`, `trackClick` — unreachable from any public method. `trackClick` targeted a route that has never existed; `trackSdkEvent` duplicated `POST /api/v1/events`, which is what event tracking already uses.
+
+### Fixed
+- `createLink` now reaches the backend. It posted to `/api/sdk/links`; the SDK router is mounted at `/api/v1/sdk`, so every call 404'd. Link creation has never succeeded in a released version.
+- `createLink`'s request body now matches the API: `destination` (was `longUrl`), flat `path`/`fallbackUrl` (was a nested `deepLinkConfig`), and UTM values as their own fields (was a `utmParams` map). `LinkParams(longUrl:)` and `DeepLinkConfig` are unchanged — only the JSON differs.
+- `createLink` no longer throws while parsing a successful response. `LinkGravity.fromJson` required `longUrl`; the API returns `destination`.
+- `LinkParams.validate()` accepted `https://example.com/p` but rejected `https://example.com` — it checked `hasAbsolutePath`, which is about the path, not the URL. It also threw on malformed input instead of returning false.
+- `getAttribution()` returned `null` in every version: the only writer to the cache it reads was a network call to a route that does not exist. The deferred-match flow now persists what it receives, so `getAttribution()` returns it. `null` now means an organic install, or that the match has not run yet.
+- README: the Android intent-filter and the iOS associated-domains entitlement both named `{…}.links.linkgravity.io`. Links are served from `linkg.io`, and that host serves neither `assetlinks.json` nor the AASA — App Links and Universal Links verification failed silently and every link opened the browser. Also a corrupted Flutter docs URL and a dashboard link pointing at the development environment.
+
+### Added
+- `test/services/api_contract_test.dart` — pins every endpoint path and the create request body against the backend. Nothing asserted either before, which is why none of the above was caught.
 ## [0.3.0] - 2026-06-04
 
 ### Added

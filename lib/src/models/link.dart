@@ -54,10 +54,15 @@ class LinkGravity {
   /// Create LinkGravity from JSON response
   factory LinkGravity.fromJson(Map<String, dynamic> json) {
     return LinkGravity(
+      // The backend calls the destination `destination`; this package calls it `longUrl`.
+      // Reading only `longUrl` meant a successful create still threw while parsing the
+      // reply. `shortUrl` is composed by the backend from the link domain — no domain is
+      // stored on the row, so the SDK cannot derive it and an empty string is the honest
+      // value when an older backend omits it.
       id: json['id'] as String,
       shortCode: json['shortCode'] as String,
-      shortUrl: json['shortUrl'] as String,
-      longUrl: json['longUrl'] as String,
+      shortUrl: json['shortUrl'] as String? ?? '',
+      longUrl: (json['destination'] ?? json['longUrl']) as String,
       title: json['title'] as String?,
       metadata: json['metadata'] as Map<String, dynamic>?,
       expiresAt: json['expiresAt'] != null

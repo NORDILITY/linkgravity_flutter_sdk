@@ -9,7 +9,7 @@ A Flutter SDK for deferred deep linking, link management, and attribution. Works
 
 ```yaml
 dependencies:
-  linkgravity_flutter_sdk: ^0.2.0
+  linkgravity_flutter_sdk: ^0.4.0
 ```
 
 ```bash
@@ -21,7 +21,7 @@ flutter pub get
 ### Prerequisite
 
 Your app needs to be created in Android Console and or the apple app store (they do not have to be released yet), to get keys for the respective OS to verify the links.
-iOS see [setup universal links](https://linkgravity.dartvigation/set-up-universal-links)
+iOS see [setup universal links](https://docs.flutter.dev/cookbook/navigation/set-up-universal-links)
 Android see [setup app links](https://docs.flutter.dev/cookbook/navigation/set-up-app-links).
 
 For Android you do not need to have the App in Console, you can test with this workaroung: Goto app settings of your App -> open by default -> add link -> choose the link gravity link schema.
@@ -44,7 +44,7 @@ void main() async {
 }
 ```
 
-get the `baseUrl` and platform-specific API keys from your [LinkGravity](https://dev.linkgravity.io/) project. You can also use a single universal `apiKey` instead of platform-specific keys (if you target only one mobile OS).
+get the `baseUrl` and platform-specific API keys from your [LinkGravity](https://linkgravity.io/) project. You can also use a single universal `apiKey` instead of platform-specific keys (if you target only one mobile OS).
 
 ### 2. Handle Deep Links
 
@@ -86,9 +86,8 @@ final link = await LinkGravityClient.instance.createLink(
 print('Short URL: ${link.shortUrl}');
 
 // Other operations
-final fetched = await LinkGravityClient.instance.getLink(link.id);
-final updated = await LinkGravityClient.instance.updateLink(link.id, LinkParams(longUrl: 'https://example.com/new'));
-await LinkGravityClient.instance.deleteLink(link.id);
+// Links are managed from the LinkGravity dashboard. The SDK creates them; it does not
+// list, edit or delete them — see the note in the API reference below.
 ```
 
 ## Track Events
@@ -130,7 +129,7 @@ Package name can be found in build.gradle.ktr for kotlin or build.grade for java
     <action android:name="android.intent.action.VIEW" />
     <category android:name="android.intent.category.DEFAULT" />
     <category android:name="android.intent.category.BROWSABLE" />
-    <data android:scheme="http" android:host="{replace_with_your_sub_domain_in_linkgravity}.links.linkgravity.io" />
+    <data android:scheme="http" android:host="{your_project_subdomain}.linkg.io" />
     <data android:scheme="https" />
 </intent-filter>
 ```
@@ -149,7 +148,7 @@ To test deep links in Android emulator without having sha256 fingerprint of you 
 <dict>
   <key>com.apple.developer.associated-domains</key>
   <array>
-    <string>applinks:{replace_with_your_sub_domain_in_linkgravity}.links.linkgravity.io</string>
+    <string>applinks:{your_project_subdomain}.linkg.io</string>
   </array>
 </dict>
 </plist>
@@ -182,10 +181,11 @@ await LinkGravityClient.initialize(
 | Method | Description |
 |--------|-------------|
 | `createLink(LinkParams)` | Create a short link |
-| `getLink(String)` | Get link by ID |
-| `getLinks({limit, offset, search})` | List links |
-| `updateLink(String, LinkParams)` | Update a link |
-| `deleteLink(String)` | Delete a link |
+
+Reading, editing and deleting links is deliberately not part of the SDK. The key an app
+ships with is a **public** key, extractable from the binary, so it can create links but
+must not be able to enumerate, rewrite or delete a project's existing ones. Use the
+dashboard for that.
 
 ### Deep Linking
 

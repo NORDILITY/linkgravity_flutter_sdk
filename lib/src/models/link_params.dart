@@ -101,7 +101,16 @@ class LinkParams {
   /// Validate parameters
   bool validate() {
     if (longUrl.isEmpty) return false;
-    if (!Uri.tryParse(longUrl)!.hasAbsolutePath) return false;
+
+    // `hasAbsolutePath` asks whether the *path* starts with "/", which is false for a bare
+    // domain — so https://example.com was rejected as invalid while https://example.com/p
+    // passed. What matters is that this is an absolute http(s) URL with a host, which is
+    // also what the backend accepts. The old check additionally force-unwrapped
+    // `tryParse`, so genuinely malformed input threw instead of returning false.
+    final uri = Uri.tryParse(longUrl);
+    if (uri == null) return false;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return false;
+    if (uri.host.isEmpty) return false;
 
     // Validate custom short code format if provided
     if (shortCode != null) {
@@ -117,18 +126,36 @@ class LinkParams {
     return true;
   }
 
+  /// Serialise for `POST /api/v1/sdk/links`.
+  ///
+  /// The field names here are the backend's, not this class's: it requires `destination`
+  /// and flat deep-link paths, while the public API keeps `longUrl` and a nested
+  /// [DeepLinkConfig]. They disagreed on every field, so a create request that reached the
+  /// route at all was rejected as invalid.
+  ///
+  /// `projectId` is deliberately absent — the backend resolves it from the API key, which
+  /// is the only party that knows which project the key belongs to.
+  ///
+  /// `metadata`, `tags` and `campaignId` are not sent: no field on the backend stores
+  /// them. They were being dropped silently before (Zod strips unknown keys); omitting
+  /// them makes that visible rather than implying they persist.
   Map<String, dynamic> toJson() {
+    final cfg = deepLinkConfig;
+    final utm = utmParams;
+
     return {
-      'longUrl': longUrl,
+      'destination': longUrl,
       if (shortCode != null) 'shortCode': shortCode,
       if (title != null) 'title': title,
       if (startsAt != null) 'startsAt': startsAt!.toIso8601String(),
       if (expiresAt != null) 'expiresAt': expiresAt!.toIso8601String(),
-      if (metadata != null) 'metadata': metadata,
-      if (deepLinkConfig != null) 'deepLinkConfig': deepLinkConfig!.toJson(),
-      if (tags != null) 'tags': tags,
-      if (campaignId != null) 'campaignId': campaignId,
-      if (utmParams != null) 'utmParams': utmParams,
+      if (cfg?.deepLinkPath != null) 'path': cfg!.deepLinkPath,
+      if (cfg?.fallbackUrl != null) 'fallbackUrl': cfg!.fallbackUrl,
+      if (utm?['source'] != null) 'source': utm!['source'],
+      if (utm?['medium'] != null) 'medium': utm!['medium'],
+      if (utm?['campaign'] != null) 'campaign': utm!['campaign'],
+      if (utm?['term'] != null) 'term': utm!['term'],
+      if (utm?['content'] != null) 'content': utm!['content'],
     };
   }
 

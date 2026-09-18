@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/link.dart';
 import '../models/link_params.dart';
-import '../models/attribution.dart';
 import '../models/analytics_event.dart';
 import '../utils/logger.dart';
 
@@ -107,44 +106,8 @@ class ApiService {
     }
   }
 
-  /// Make PUT request
-  Future<Map<String, dynamic>> _put(
-    String path,
-    Map<String, dynamic> body,
-  ) async {
-    try {
-      final uri = Uri.parse(_buildUrl(path));
-
-      LinkGravityLogger.debug('PUT $uri');
-
-      final response = await client
-          .put(uri, headers: headers, body: jsonEncode(body))
-          .timeout(timeout);
-
-      return _handleResponse(response);
-    } catch (e) {
-      LinkGravityLogger.error('PUT request failed: $path', e);
-      rethrow;
-    }
-  }
-
-  /// Make DELETE request
-  Future<void> _delete(String path) async {
-    try {
-      final uri = Uri.parse(_buildUrl(path));
-
-      LinkGravityLogger.debug('DELETE $uri');
-
-      final response = await client
-          .delete(uri, headers: headers)
-          .timeout(timeout);
-
-      _handleResponse(response);
-    } catch (e) {
-      LinkGravityLogger.error('DELETE request failed: $path', e);
-      rethrow;
-    }
-  }
+  // _put and _delete went with the link-management methods in 0.4.0 — the SDK now only
+  // GETs and POSTs. Reinstate them alongside whatever needs them, not speculatively.
 
   /// Handle HTTP response
   Map<String, dynamic> _handleResponse(http.Response response) {
@@ -184,36 +147,17 @@ class ApiService {
   // LINK MANAGEMENT
   // ============================================================================
 
-  /// Create a new LinkGravity
-  /// POST /api/v1/links
-  Future<LinkGravity> createLink(LinkParams params) async {
-    if (!params.validate()) {
-      throw ApiException('Invalid link parameters');
-    }
-
-    final response = await _post('/api/v1/links', params.toJson());
-
-    if (response['success'] == true && response['data'] != null) {
-      return LinkGravity.fromJson(response['data'] as Map<String, dynamic>);
-    }
-
-    // Handle nested link object (common API pattern)
-    if (response['link'] != null) {
-      return LinkGravity.fromJson(response['link'] as Map<String, dynamic>);
-    }
-
-    throw ApiException('Failed to create link: ${response['message']}');
-  }
-
   /// Create a dynamic (share) link via SDK using Public API Key
-  /// POST /api/sdk/links
+  /// POST /api/v1/sdk/links
   Future<LinkGravity> createDynamicLink(LinkParams params) async {
     if (!params.validate()) {
       throw ApiException('Invalid link parameters');
     }
 
-    // Use /api/sdk/links endpoint which supports Public API Key + Rate Limiting
-    final response = await _post('/api/sdk/links', params.toJson());
+    // Use /api/v1/sdk/links, which accepts a public API key and applies the domain
+    // whitelist and rate limit. The backend mounts the SDK router at /api/v1/sdk; the
+    // path here was missing the /v1 and had never resolved — every call 404'd.
+    final response = await _post('/api/v1/sdk/links', params.toJson());
 
     // Handle response
     if (response['link'] != null) {
@@ -229,59 +173,6 @@ class ApiService {
     );
   }
 
-  /// Get a specific link by ID
-  /// GET /api/v1/links/:id
-  Future<LinkGravity> getLink(String linkId) async {
-    final response = await _get('/api/v1/links/$linkId');
-
-    if (response['success'] == true && response['data'] != null) {
-      return LinkGravity.fromJson(response['data'] as Map<String, dynamic>);
-    }
-
-    throw ApiException('Failed to get link: ${response['message']}');
-  }
-
-  /// Get all links (with pagination)
-  /// GET /api/v1/links
-  Future<List<LinkGravity>> getLinks({
-    int? limit,
-    int? offset,
-    String? search,
-  }) async {
-    final queryParams = <String, String>{};
-    if (limit != null) queryParams['limit'] = limit.toString();
-    if (offset != null) queryParams['offset'] = offset.toString();
-    if (search != null) queryParams['search'] = search;
-
-    final response = await _get('/api/v1/links', queryParams: queryParams);
-
-    if (response['success'] == true && response['data'] != null) {
-      final linksData = response['data'] as List;
-      return linksData
-          .map((json) => LinkGravity.fromJson(json as Map<String, dynamic>))
-          .toList();
-    }
-
-    throw ApiException('Failed to get links: ${response['message']}');
-  }
-
-  /// Update an existing link
-  /// PUT /api/v1/links/:id
-  Future<LinkGravity> updateLink(String linkId, LinkParams params) async {
-    final response = await _put('/api/v1/links/$linkId', params.toJson());
-
-    if (response['success'] == true && response['data'] != null) {
-      return LinkGravity.fromJson(response['data'] as Map<String, dynamic>);
-    }
-
-    throw ApiException('Failed to update link: ${response['message']}');
-  }
-
-  /// Delete a link
-  /// DELETE /api/v1/links/:id
-  Future<void> deleteLink(String linkId) async {
-    await _delete('/api/v1/links/$linkId');
-  }
 
   // ============================================================================
   // SDK / DEFERRED DEEP LINKING
@@ -329,48 +220,7 @@ class ApiService {
     }
   }
 
-  /// Get deferred deep link data (after app install) using fingerprint
-  /// GET /api/v1/sdk/deferred-link?fingerprint=...
-  ///
-  /// This is the probabilistic fallback method when Android referrer is not available.
-  Future<AttributionData?> getDeferredLink(String fingerprint) async {
-    try {
-      final response = await _get(
-        '/api/v1/sdk/deferred-link',
-        queryParams: {'fingerprint': fingerprint},
-      );
 
-      if (response['success'] == true && response['data'] != null) {
-        return AttributionData.fromJson(
-          response['data'] as Map<String, dynamic>,
-        );
-      }
-
-      return null;
-    } catch (e) {
-      LinkGravityLogger.warning('No deferred link found', e);
-      return null;
-    }
-  }
-
-
-  /// Track SDK event
-  /// POST /api/v1/sdk/events
-  Future<void> trackSdkEvent({
-    required String name,
-    Map<String, dynamic>? properties,
-    String? linkId,
-    String? fingerprint,
-    String? deviceId,
-  }) async {
-    await _post('/api/v1/sdk/events', {
-      'name': name,
-      if (properties != null) 'properties': properties,
-      if (linkId != null) 'linkId': linkId,
-      if (fingerprint != null) 'fingerprint': fingerprint,
-      if (deviceId != null) 'deviceId': deviceId,
-    });
-  }
 
   /// Track conversion (purchase, signup, etc.)
   /// POST /api/v1/sdk/conversions
@@ -457,15 +307,6 @@ class ApiService {
     await _post('/api/v1/events', event.toJson());
   }
 
-  // ============================================================================
-  // CLICK TRACKING
-  // ============================================================================
-
-  /// Track link click
-  /// This is typically handled by the backend redirect, but can be called manually
-  Future<void> trackClick(String linkId, Map<String, dynamic> data) async {
-    await _post('/api/v1/links/$linkId/click', data);
-  }
 
   // ============================================================================
   // DEFERRED DEEP LINKING
