@@ -32,4 +32,14 @@ jobs:
         run: flutter test
 
       - name: Verify the package is publishable
-        run: flutter pub publish --dry-run
+        run: |
+          # Validate the committed tree, not the working tree. The Flutter tool rewrites
+          # analysis_options.yaml on newer SDKs, and `pub publish` refuses to validate a
+          # repository whose checked-in files are modified — so the working tree fails for
+          # a reason that has nothing to do with the package. `git archive` hands pub
+          # exactly the bytes a publish would upload, with no .git to trip over.
+          git diff --stat
+          mkdir -p "$RUNNER_TEMP/pkgcheck"
+          git archive HEAD | tar -x -C "$RUNNER_TEMP/pkgcheck"
+          cd "$RUNNER_TEMP/pkgcheck"
+          flutter pub publish --dry-run
