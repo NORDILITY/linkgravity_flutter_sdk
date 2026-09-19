@@ -17,7 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `trackConversion` sends `deviceId`, so a conversion is attributed from the device's install when no `linkId` is given.
 
 ### Changed
-- **Breaking:** event batches post to `POST /api/v1/sdk/events` instead of `POST /api/v1/events`. The old path still accepts API-key batches for one release and will then be session-only. Requires a backend from 19 Sep 2026 or later.
+- **Breaking:** event batches post to `POST /api/v1/sdk/events` instead of `POST /api/v1/events`. Requires a backend from 19 Sep 2026 or later.
+
+### Deprecated
+- `POST /api/v1/events` for API-key batches. It still accepts them for one more release so a 0.4.0 build keeps working, then becomes session-only. Nothing to do if you are on 0.5.0.
 
 ### Removed
 - **Breaking:** `trackConversion(eventId: ...)`. The backend dropped the field — no SDK path could fill it: the id it referred to is generated server-side and never returned to the client.
