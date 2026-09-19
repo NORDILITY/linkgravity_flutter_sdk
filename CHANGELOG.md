@@ -5,6 +5,24 @@ All notable changes to the LinkGravity Flutter SDK will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-19
+
+### Fixed
+- **Analytics events now reach the dashboard.** Batches carry `deviceId` and `linkId`, so the backend can attribute them and scope them to a project. Without that the events were stored and then filtered out by every dashboard query — the Events chart read zero no matter how many events an app sent, and nothing reported an error.
+- `trackEvent` no longer blocks the caller. Every `batchSize`-th call awaited an HTTP round trip, which freezes the UI when it happens inside an `onPressed` handler on a bad connection. The flush is fired without awaiting; the queue is cleared before the first suspension, so no batch is sent twice.
+- `setUserId` is no longer discarded. The value was attached to every event and then dropped when the batch was serialised, so identity stitching had nothing to work with.
+
+### Added
+- `trackConversion(transactionId: ...)`. **Pass it for anything with revenue.** Mobile networks make retries routine, and without a deduplication key one purchase is recorded once per retry. Repeats now collapse onto the first write. Also exposed on the FlutterFlow action.
+- `trackConversion` sends `deviceId`, so a conversion is attributed from the device's install when no `linkId` is given.
+
+### Changed
+- **Breaking:** event batches post to `POST /api/v1/sdk/events` instead of `POST /api/v1/events`. The old path still accepts API-key batches for one release and will then be session-only. Requires a backend from 19 Sep 2026 or later.
+
+### Removed
+- **Breaking:** `trackConversion(eventId: ...)`. The backend dropped the field — no SDK path could fill it: the id it referred to is generated server-side and never returned to the client.
+- `ApiService.trackEvent` — unreachable from any public method, and aimed at a path that is becoming session-only. Same cleanup 0.4.0 applied to its siblings.
+
 ## [0.4.0] - 2026-09-14
 
 ### Removed

@@ -178,9 +178,16 @@ class AnalyticsService {
     LinkGravityLogger.debug(
         'Event tracked: $eventName (queue size: ${_eventQueue.length})');
 
-    // Check if we should flush
+    // Deliberately not awaited. This used to `await flush()`, so one call in every
+    // batchSize blocked on an HTTP round trip — and `trackEvent` is routinely called from
+    // an onPressed handler, where that shows up as a frozen tap on a bad connection.
+    //
+    // Safe because flush() copies and clears _eventQueue before its first await, so a
+    // concurrent trackEvent cannot re-send this batch. Delivery failures were already
+    // invisible to the caller (flush swallows them into the offline queue), so nothing is
+    // lost by not waiting. dispose() still awaits a final flush.
     if (_eventQueue.length >= batchSize) {
-      await flush();
+      unawaited(flush());
     } else {
       _scheduleBatchFlush();
     }
@@ -218,9 +225,22 @@ class AnalyticsService {
 
     LinkGravityLogger.info('Flushing ${events.length} events...');
 
+    // Attribution for the batch. Every event here came from this device, so one lookup
+    // answers for all of them. The backend can recover this from deviceId alone, but
+    // sending what we already know saves it the query and keeps last-touch correct when
+    // the stored attribution is newer than the install.
+    String? deviceId;
+    String? linkId;
+    try {
+      deviceId = await _storage.getDeviceId();
+      linkId = (await _storage.getAttribution())?.linkId;
+    } catch (e) {
+      LinkGravityLogger.debug('No stored attribution for this batch: $e');
+    }
+
     try {
       if (_isOnline) {
-        await _api.sendBatch(events);
+        await _api.sendBatch(events, deviceId: deviceId, linkId: linkId);
         await _storage.saveLastEventSync();
         LinkGravityLogger.info('Successfully sent ${events.length} events');
       } else {

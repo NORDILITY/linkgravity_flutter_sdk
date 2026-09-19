@@ -232,14 +232,16 @@ class ApiService {
   /// - [revenue]: Revenue amount (optional)
   /// - [currency]: Currency code (default: 'USD')
   /// - [linkId]: Associated link ID for attribution
-  /// - [eventId]: Unique event identifier
+  /// - [transactionId]: Store order id, used to deduplicate retries
   /// - [metadata]: Additional conversion data
   Future<bool> trackConversion({
     required String type,
     double? revenue,
     String currency = 'USD',
     String? linkId,
-    String? eventId,
+    String? clickId,
+    String? deviceId,
+    String? transactionId,
     Map<String, dynamic>? metadata,
   }) async {
     try {
@@ -249,7 +251,9 @@ class ApiService {
         if (revenue != null) 'revenue': revenue,
         'currency': currency,
         if (linkId != null) 'linkId': linkId,
-        if (eventId != null) 'eventId': eventId,
+        if (clickId != null) 'clickId': clickId,
+        if (deviceId != null) 'deviceId': deviceId,
+        if (transactionId != null) 'transactionId': transactionId,
         if (metadata != null) 'metadata': metadata,
       });
 
@@ -268,12 +272,21 @@ class ApiService {
   // ============================================================================
 
   /// Send batch of analytics events
-  /// POST /api/v1/events (bulk)
+  /// POST /api/v1/sdk/events (bulk)
   ///
-  /// Backend expects: { events: [{ type, properties, timestamp, sessionId }], fingerprint?, deviceId?, sessionId? }
+  /// Backend expects: { events: [{ type, properties, timestamp, sessionId }],
+  /// fingerprint?, deviceId?, sessionId?, linkId?, clickId?, userId? }
   /// SDK sends: { events: [{ id, name, data, timestamp, ... }] }
   /// This method transforms the SDK format to match the backend schema.
-  Future<void> sendBatch(List<AnalyticsEvent> events) async {
+  ///
+  /// [deviceId] and [linkId] are what let the backend attribute these events. Without
+  /// them every event lands unattributed, which is what the whole batch used to do.
+  Future<void> sendBatch(
+    List<AnalyticsEvent> events, {
+    String? deviceId,
+    String? linkId,
+    String? clickId,
+  }) async {
     if (events.isEmpty) return;
 
     // Transform events to match backend schema
@@ -292,19 +305,19 @@ class ApiService {
     // Extract common fields from first event (all events in batch share same fingerprint/session)
     final firstEvent = events.first;
 
-    await _post('/api/v1/events', {
+    await _post('/api/v1/sdk/events', {
       'events': eventsJson,
       if (firstEvent.fingerprint != null) 'fingerprint': firstEvent.fingerprint,
       if (firstEvent.sessionId != null) 'sessionId': firstEvent.sessionId,
+      if (deviceId != null) 'deviceId': deviceId,
+      if (linkId != null) 'linkId': linkId,
+      if (clickId != null) 'clickId': clickId,
+      // The app's own user id, from setUserId. It was carried on every AnalyticsEvent and
+      // then dropped here, so identity stitching had nothing to stitch.
+      if (firstEvent.userId != null) 'userId': firstEvent.userId,
     });
 
     LinkGravityLogger.info('Sent ${events.length} events to backend');
-  }
-
-  /// Track single event
-  /// POST /api/v1/events
-  Future<void> trackEvent(AnalyticsEvent event) async {
-    await _post('/api/v1/events', event.toJson());
   }
 
 

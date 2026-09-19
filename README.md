@@ -104,10 +104,15 @@ await LinkGravityClient.instance.trackConversion(
   type: 'purchase',
   revenue: 29.99,
   currency: 'USD',
+  // Pass the store's order id for anything with revenue. Mobile networks drop, SDKs
+  // retry, and without this the same purchase is counted once per retry.
+  transactionId: order.id,
 );
 ```
 
 Events are batched and sent automatically. If the device is offline, events are queued and sent when connectivity returns.
+
+Attribution is handled for you: batches carry this device's id, so the backend ties events and conversions to the link that brought the user in. Pass `linkId` only to override that.
 
 ## Platform Setup
 
@@ -201,7 +206,7 @@ dashboard for that.
 | Method | Description |
 |--------|-------------|
 | `trackEvent(String, Map?)` | Track a custom event |
-| `trackConversion({type, revenue, currency})` | Track a conversion |
+| `trackConversion({type, revenue, currency, transactionId})` | Track a conversion — pass `transactionId` to make retries idempotent |
 | `flushEvents()` | Flush pending event batch |
 | `getAttribution()` | Get attribution data for this device |
 | `setUserId(String)` | Associate events with a user |

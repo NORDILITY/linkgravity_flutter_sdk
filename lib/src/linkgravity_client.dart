@@ -795,22 +795,37 @@ class LinkGravityClient {
   /// - [type]: Type of conversion (e.g., 'purchase', 'signup', 'subscription')
   /// - [revenue]: Revenue amount (optional)
   /// - [currency]: Currency code (default: 'USD')
-  /// - [linkId]: Associated link ID for attribution (optional)
+  /// - [linkId]: Associated link ID for attribution (optional). Left unset, the backend
+  ///   attributes the conversion from this device's install.
+  /// - [transactionId]: The store's order id. **Pass this for anything with revenue.**
+  ///   Network drops make retries routine, and without it one $99 purchase is recorded
+  ///   three times. With it, repeats collapse onto the first write.
   /// - [metadata]: Additional conversion data (optional)
   Future<bool> trackConversion({
     required String type,
     double? revenue,
     String currency = 'USD',
     String? linkId,
+    String? transactionId,
     Map<String, dynamic>? metadata,
   }) async {
     _ensureInitialized();
+
+    // Let the backend attribute from the device when the caller does not say.
+    String? deviceId;
+    try {
+      deviceId = await _storage.getDeviceId();
+    } catch (e) {
+      LinkGravityLogger.debug('No stored deviceId for this conversion: $e');
+    }
 
     final success = await _api.trackConversion(
       type: type,
       revenue: revenue,
       currency: currency,
       linkId: linkId,
+      deviceId: deviceId,
+      transactionId: transactionId,
       metadata: metadata,
     );
 
