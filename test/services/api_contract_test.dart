@@ -185,26 +185,44 @@ void main() {
       expect(event.containsKey('name'), isFalse);
     });
 
-    test('trackConversion sends transactionId so a retry cannot double-count', () async {
+
+  });
+
+  group('money rides on the event, not a second endpoint', () {
+    test('sendBatch serialises revenue, currency and transactionId per event', () async {
       final seen = _Captured();
-      await _service(seen).trackConversion(
-        type: 'purchase',
-        revenue: 99,
-        transactionId: 'order-1',
-        deviceId: 'device-1',
-      );
+      await _service(seen).sendBatch([
+        AnalyticsEvent(
+          id: 'e1',
+          name: 'purchase',
+          data: const {},
+          timestamp: DateTime.utc(2026, 9, 19, 12),
+          revenue: 29.99,
+          currency: 'EUR',
+          transactionId: 'order-1',
+        ),
+        AnalyticsEvent(
+          id: 'e2',
+          name: 'screen_view',
+          data: const {},
+          timestamp: DateTime.utc(2026, 9, 19, 12),
+        ),
+      ]);
 
-      expect(seen.uri.path, '/api/v1/sdk/conversions');
-      expect(seen.body['transactionId'], 'order-1');
-      expect(seen.body['deviceId'], 'device-1');
-    });
+      expect(seen.uri.path, '/api/v1/sdk/events');
 
-    test('trackConversion no longer sends eventId', () async {
-      // The backend dropped the column: no SDK path could ever fill it.
-      final seen = _Captured();
-      await _service(seen).trackConversion(type: 'signup', revenue: 0);
+      final events = seen.body['events'] as List;
+      final purchase = events.first as Map<String, dynamic>;
+      expect(purchase['revenue'], 29.99);
+      expect(purchase['currency'], 'EUR');
+      expect(purchase['transactionId'], 'order-1');
 
-      expect(seen.body.containsKey('eventId'), isFalse);
+      // Telemetry in the same batch carries no money at all — not a zero, not a
+      // default currency. The backend rejects half the pair, and an invented
+      // currency is worse than a missing one.
+      final telemetry = events[1] as Map<String, dynamic>;
+      expect(telemetry.containsKey('revenue'), isFalse);
+      expect(telemetry.containsKey('currency'), isFalse);
     });
   });
 }

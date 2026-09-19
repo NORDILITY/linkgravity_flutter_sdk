@@ -805,38 +805,37 @@ class LinkGravityClient {
   Future<bool> trackConversion({
     required String type,
     double? revenue,
-    String currency = 'USD',
+    String? currency,
     String? linkId,
     String? transactionId,
     Map<String, dynamic>? metadata,
   }) async {
     _ensureInitialized();
 
-    // Let the backend attribute from the device when the caller does not say.
-    String? deviceId;
-    try {
-      deviceId = await _storage.getDeviceId();
-    } catch (e) {
-      LinkGravityLogger.debug('No stored deviceId for this conversion: $e');
+    // `currency` no longer defaults to 'USD'. It used to, so an app selling in euros that
+    // never set it filed every sale as dollars — permanently, and with nothing to indicate
+    // it. An invented currency is worse than a missing one.
+    if ((revenue ?? 0) > 0 && currency == null) {
+      LinkGravityLogger.error(
+        'trackConversion: currency is required when revenue > 0. '
+        'The conversion was not tracked — an invented currency is worse than a missing one.',
+      );
+      return false;
     }
 
-    final success = await _api.trackConversion(
-      type: type,
-      revenue: revenue,
-      currency: currency,
-      linkId: linkId,
-      deviceId: deviceId,
-      transactionId: transactionId,
-      metadata: metadata,
+    await _analytics.trackEvent(
+      type,
+      metadata,
+      revenue,
+      currency,
+      transactionId,
     );
 
-    if (success) {
-      LinkGravityLogger.info(
-        'Conversion tracked: $type${revenue != null ? ' ($revenue $currency)' : ''}',
-      );
-    }
+    LinkGravityLogger.info(
+      'Conversion queued: $type${revenue != null ? ' ($revenue $currency)' : ''}',
+    );
 
-    return success;
+    return true;
   }
 
   /// Manually flush pending analytics events

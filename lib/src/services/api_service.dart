@@ -223,49 +223,6 @@ class ApiService {
 
 
   /// Track conversion (purchase, signup, etc.)
-  /// POST /api/v1/sdk/conversions
-  ///
-  /// Tracks conversion events like purchases, signups, or other valuable actions.
-  ///
-  /// Parameters:
-  /// - [type]: Type of conversion (e.g., 'purchase', 'signup', 'subscription')
-  /// - [revenue]: Revenue amount (optional)
-  /// - [currency]: Currency code (default: 'USD')
-  /// - [linkId]: Associated link ID for attribution
-  /// - [transactionId]: Store order id, used to deduplicate retries
-  /// - [metadata]: Additional conversion data
-  Future<bool> trackConversion({
-    required String type,
-    double? revenue,
-    String currency = 'USD',
-    String? linkId,
-    String? clickId,
-    String? deviceId,
-    String? transactionId,
-    Map<String, dynamic>? metadata,
-  }) async {
-    try {
-      await _post('/api/v1/sdk/conversions', {
-        'type': type,
-        'timestamp': DateTime.now().toIso8601String(),
-        if (revenue != null) 'revenue': revenue,
-        'currency': currency,
-        if (linkId != null) 'linkId': linkId,
-        if (clickId != null) 'clickId': clickId,
-        if (deviceId != null) 'deviceId': deviceId,
-        if (transactionId != null) 'transactionId': transactionId,
-        if (metadata != null) 'metadata': metadata,
-      });
-
-      LinkGravityLogger.info(
-        'Conversion tracked: $type${linkId != null ? ' for $linkId' : ''}',
-      );
-      return true;
-    } catch (e) {
-      LinkGravityLogger.error('Error tracking conversion: $e', e);
-      return false;
-    }
-  }
 
   // ============================================================================
   // ANALYTICS
@@ -298,6 +255,11 @@ class ApiService {
             'properties': e.data,
             'timestamp': e.timestamp.toIso8601String(),
             if (e.sessionId != null) 'sessionId': e.sessionId,
+            // Money, when the event involved any. Sent per event rather than per batch:
+            // one flush can carry a purchase and the screen views around it.
+            if (e.revenue != null) 'revenue': e.revenue,
+            if (e.currency != null) 'currency': e.currency,
+            if (e.transactionId != null) 'transactionId': e.transactionId,
           },
         )
         .toList();

@@ -157,6 +157,9 @@ class AnalyticsService {
   Future<void> trackEvent(
     String eventName, [
     Map<String, dynamic>? properties,
+    double? revenue,
+    String? currency,
+    String? transactionId,
   ]) async {
     if (!enabled) {
       LinkGravityLogger.debug(
@@ -182,11 +185,25 @@ class AnalyticsService {
       userId: _userId,
       sessionId: _sessionId,
       fingerprint: _fingerprint,
+      revenue: revenue,
+      currency: currency,
+      transactionId: transactionId,
     );
 
     _eventQueue.add(event);
     LinkGravityLogger.debug(
         'Event tracked: $eventName (queue size: ${_eventQueue.length})');
+
+    // Money does not wait for the batch to fill or the 30s timer.
+    //
+    // Through the queue, not around it. A purchase on its own request can overtake the
+    // add_to_cart still sitting in the batch, and out-of-order events corrupt funnel
+    // analysis in a way that is very hard to see afterwards. Writing it to the queue first
+    // also means it survives the app being killed before the network call.
+    if (revenue != null) {
+      unawaited(flush());
+      return;
+    }
 
     // Deliberately not awaited. This used to `await flush()`, so one call in every
     // batchSize blocked on an HTTP round trip — and `trackEvent` is routinely called from

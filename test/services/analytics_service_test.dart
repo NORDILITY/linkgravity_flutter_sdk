@@ -121,4 +121,39 @@ void main() {
     expect(seen.calls, greaterThan(0), reason: 'the retry should have sent something');
     expect(seen.body['deviceId'], 'device-xyz');
   });
+
+  test('a revenue event flushes immediately, without waiting for the batch', () async {
+    // Telemetry waits for 20 events or 30 seconds. Money does not — but it goes through the
+    // queue rather than around it, so it survives the app being killed and cannot overtake
+    // the add_to_cart still sitting in the batch.
+    final seen = _Captured();
+    final analytics = _service(seen, storage)..platform = 'ios';
+
+    await analytics.trackEvent('screen_view');
+    expect(seen.calls, 0, reason: 'telemetry should still be waiting');
+
+    await analytics.trackEvent('purchase', {'sku': 'x'}, 29.99, 'EUR', 'order-9');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(seen.calls, 1);
+    final events = seen.body['events'] as List;
+    expect(events, hasLength(2), reason: 'the queued screen_view should ride along');
+
+    final purchase = events[1] as Map<String, dynamic>;
+    expect(purchase['revenue'], 29.99);
+    expect(purchase['currency'], 'EUR');
+    expect(purchase['transactionId'], 'order-9');
+  });
+
+  test('telemetry carries no revenue or currency', () async {
+    final seen = _Captured();
+    final analytics = _service(seen, storage)..platform = 'ios';
+
+    await analytics.trackEvent('screen_view');
+    await analytics.flush();
+
+    final event = (seen.body['events'] as List).first as Map<String, dynamic>;
+    expect(event.containsKey('revenue'), isFalse);
+    expect(event.containsKey('currency'), isFalse);
+  });
 }

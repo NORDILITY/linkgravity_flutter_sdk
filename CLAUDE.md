@@ -131,9 +131,14 @@ kept for one release and then becomes session-only. A batch must carry `deviceId
 and a batch without them lands unattributed and invisible to the dashboard, with no error
 on either side. That was the state of every release before 0.5.0.
 
-`trackConversion` should be given a `transactionId` whenever revenue is involved. Retries
-are routine on mobile, and the backend deduplicates on that key — without it the same
-purchase is counted once per retry.
+`trackConversion` is a wrapper over `trackEvent`: a purchase is an event carrying `revenue`,
+`currency` and `transactionId`. There is no conversions endpoint. Give it a `transactionId`
+whenever revenue is involved — retries are routine on mobile and the backend deduplicates on
+that key, so without it the same purchase counts once per retry.
+
+`currency` is never defaulted and never guessed. It is required when `revenue > 0`, and the
+call is refused otherwise; a non-monetary conversion stores neither field. The backend
+rejects half the pair, at the schema and at a database constraint.
 
 `AnalyticsService.trackEvent` queues; it does not send. Delivery happens in `flush()`,
 which never surfaces failures to the caller (they go to the offline queue), so a silent

@@ -165,7 +165,9 @@ Future<void> trackLinkGravityEventWithJSON({
 Future<bool> trackLinkGravityConversion({
   required String type,
   required double revenue,
-  String currency = 'USD',
+  /// Required: this action always carries revenue, so there is always a currency to
+  /// name. It used to default to 'USD', which filed every euro sale as dollars.
+  required String currency,
   String? linkId,
   String? transactionId,
 }) async {

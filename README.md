@@ -99,15 +99,18 @@ await LinkGravityClient.instance.trackEvent('product_viewed', {
   'category': 'electronics',
 });
 
-// Conversions
+// Conversions — an event that carries money
 await LinkGravityClient.instance.trackConversion(
   type: 'purchase',
   revenue: 29.99,
-  currency: 'USD',
+  currency: 'EUR',       // required when there is revenue; never guessed
   // Pass the store's order id for anything with revenue. Mobile networks drop, SDKs
   // retry, and without this the same purchase is counted once per retry.
   transactionId: order.id,
 );
+
+// Conversions without money are fine — no revenue, no currency, nothing invented.
+await LinkGravityClient.instance.trackConversion(type: 'signup');
 ```
 
 Events are batched and sent automatically. If the device is offline, events are queued and sent when connectivity returns.
@@ -206,7 +209,7 @@ dashboard for that.
 | Method | Description |
 |--------|-------------|
 | `trackEvent(String, Map?)` | Track a custom event |
-| `trackConversion({type, revenue, currency, transactionId})` | Track a conversion — pass `transactionId` to make retries idempotent |
+| `trackConversion({type, revenue, currency, transactionId})` | Track a conversion. `currency` is required with `revenue`; `transactionId` makes retries idempotent. Returns `true` when queued |
 | `flushEvents()` | Flush pending event batch |
 | `getAttribution()` | Get attribution data for this device |
 | `setUserId(String)` | Associate events with a user |

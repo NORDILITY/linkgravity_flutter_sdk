@@ -17,12 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `trackConversion(transactionId: ...)`. **Pass it for anything with revenue.** Mobile networks make retries routine, and without a deduplication key one purchase is recorded once per retry. Repeats now collapse onto the first write. Also exposed on the FlutterFlow action.
 - `trackConversion` sends `deviceId`, so a conversion is attributed from the device's install when no `linkId` is given.
+- Conversions inherit the offline queue. **They never had one**: a conversion that hit a network error was logged and discarded, while a failed `screen_view` was written to disk and resent. The path carrying money had the weaker guarantee. It now goes through the same queue — and flushes immediately rather than waiting for the batch, so it does not sit there for 30 seconds either.
 
 ### Changed
 - **Breaking:** event batches post to `POST /api/v1/sdk/events` instead of `POST /api/v1/events`. Requires a backend from 19 Sep 2026 or later.
+- **Breaking:** `trackConversion` is now a thin wrapper over `trackEvent` — same method, same arguments, one transport underneath. It returns `true` when the event is **queued**, not when it is delivered; delivery failures go to the offline queue and are retried, which is the behaviour you want and was not what `false` used to mean.
+- **Breaking:** `currency` no longer defaults to `'USD'`. It is required whenever `revenue > 0`, and `trackConversion` refuses the call rather than guessing. An app selling in euros that never set it filed every sale as dollars, permanently, with nothing to indicate it. The FlutterFlow action takes `required String currency`, since its `revenue` was already required.
+- A conversion with no revenue — a signup, a tutorial completion — stores no revenue and no currency, rather than `0.00 USD`. Zero is a measurement; absent is a category, and the two should not look alike in your reports.
 
-### Deprecated
-- `POST /api/v1/events` for API-key batches. It still accepts them for one more release so a 0.4.0 build keeps working, then becomes session-only. Nothing to do if you are on 0.5.0.
+### Removed
+- **Breaking:** `POST /api/v1/events` no longer accepts events. It answers `410 Gone` naming the new path. There is no compatibility window: a pre-0.5.0 build sends no `deviceId`, `linkId` or revenue, so it could only have produced unattributed rows that look like working data. Rebuild on 0.5.0.
+- **Breaking:** `POST /api/v1/sdk/conversions` is gone, and with it `ApiService.trackConversion`. A purchase is an event that carries money — see below.
 
 ### Removed
 - **Breaking:** `trackConversion(eventId: ...)`. The backend dropped the field — no SDK path could fill it: the id it referred to is generated server-side and never returned to the client.
