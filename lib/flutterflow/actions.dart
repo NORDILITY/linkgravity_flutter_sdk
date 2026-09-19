@@ -156,7 +156,9 @@ Future<void> trackLinkGravityEventWithJSON({
 /// Parameters:
 /// - [type]: Conversion type (e.g., "purchase", "signup")
 /// - [revenue]: Revenue amount
-/// - [currency]: Currency code (default: "USD")
+/// - [currency]: ISO 4217 code. **Required** — this action always carries revenue, so
+///   there is always a currency to name. It used to default to "USD", which filed every
+///   euro sale as dollars.
 /// - [transactionId]: The store's order id. Pass it — retries are routine on mobile, and
 ///   without it one purchase can be counted several times.
 ///

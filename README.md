@@ -9,7 +9,7 @@ A Flutter SDK for deferred deep linking, link management, and attribution. Works
 
 ```yaml
 dependencies:
-  linkgravity_flutter_sdk: ^0.4.0
+  linkgravity_flutter_sdk: ^0.5.0
 ```
 
 ```bash
@@ -115,7 +115,7 @@ await LinkGravityClient.instance.trackConversion(type: 'signup');
 
 Events are batched and sent automatically. If the device is offline, events are queued and sent when connectivity returns.
 
-Attribution is handled for you: batches carry this device's id, so the backend ties events and conversions to the link that brought the user in. Pass `linkId` only to override that.
+Attribution is handled for you: batches carry this device's id, so the backend ties events and conversions to the link that brought the user in. There is nothing to pass and no way to override it — the same as Branch and AppsFlyer.
 
 ## Platform Setup
 

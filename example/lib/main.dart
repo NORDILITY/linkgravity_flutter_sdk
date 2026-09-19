@@ -162,7 +162,13 @@ class _MyHomePageState extends State<MyHomePage> {
     final success = await LinkGravityClient.instance.trackConversion(
       type: 'purchase',
       revenue: 29.99,
-      currency: 'USD',
+      // Required with revenue. The SDK refuses the call rather than guessing —
+      // an invented currency is stored as fact.
+      currency: 'EUR',
+      // Always pass the store's order id for a real purchase. Mobile networks drop and
+      // SDKs retry; without a key here the same sale is counted once per retry. A demo
+      // button has no order, so this stands in for one.
+      transactionId: 'demo-order-${DateTime.now().millisecondsSinceEpoch}',
       metadata: {'product_id': '123', 'product_name': 'Demo Product'},
     );
 
@@ -325,7 +331,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       'LinkGravityClient.trackEvent(). The SDK batches events '
                       '(20 per batch or every 30s) and auto-attaches install '
                       'UTM for attribution. Use Flush to force an immediate '
-                      'POST to /api/v1/events.',
+                      'POST to /api/v1/sdk/events.',
                     ),
                     const SizedBox(height: 12),
                     Wrap(
