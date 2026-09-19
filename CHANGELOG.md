@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Analytics events now reach the dashboard.** Batches carry `deviceId` and `linkId`, so the backend can attribute them and scope them to a project. Without that the events were stored and then filtered out by every dashboard query — the Events chart read zero no matter how many events an app sent, and nothing reported an error.
 - `trackEvent` no longer blocks the caller. Every `batchSize`-th call awaited an HTTP round trip, which freezes the UI when it happens inside an `onPressed` handler on a bad connection. The flush is fired without awaiting; the queue is cleared before the first suspension, so no batch is sent twice.
+- **The platform breakdown now describes something.** Only the SDK's own events set `platform`, so every event an app tracked itself was filed as Unknown. It is attached to all of them now; an explicit `platform` in your properties still wins.
+- Events retried from the offline queue carry attribution. They were re-sent without a device id, so anything that had once hit a bad connection arrived unattributed.
 - `setUserId` is no longer discarded. The value was attached to every event and then dropped when the batch was serialised, so identity stitching had nothing to work with.
 
 ### Added

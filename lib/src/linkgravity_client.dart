@@ -232,6 +232,7 @@ class LinkGravityClient {
       LinkGravityLogger.debug('App version: $_appVersion');
 
       // Initialize analytics service
+      _analytics.platform = await _fingerprint.getPlatformName();
       await _analytics.initialize();
 
       // Generate/retrieve device fingerprint

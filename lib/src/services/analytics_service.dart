@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/analytics_event.dart';
 import '../models/utm_params.dart';
@@ -40,6 +41,13 @@ class AnalyticsService {
 
   /// Current device fingerprint
   String? _fingerprint;
+
+  /// 'ios' or 'android', attached to every event.
+  ///
+  /// The backend reads `properties.platform` to build the platform breakdown. Only the
+  /// SDK's own events used to set it, so every event an app tracked itself was filed as
+  /// Unknown — the breakdown existed and described nothing.
+  String? _platform;
 
   /// Cached UTM parameters from install (for auto-attachment to events)
   UTMParams? _cachedUTM;
@@ -158,6 +166,8 @@ class AnalyticsService {
 
     // Merge user properties with auto-attached UTM parameters
     final eventData = <String, dynamic>{
+      if (_platform != null) 'platform': _platform,
+      // After the caller's own properties, so an explicit platform still wins.
       ...?properties,
       // Auto-attach UTM parameters if available (for attribution)
       if (_cachedUTM != null && _cachedUTM!.isNotEmpty)
@@ -193,6 +203,9 @@ class AnalyticsService {
     }
   }
 
+  /// Set the device platform, attached to every subsequent event.
+  set platform(String? value) => _platform = value;
+
   /// Set user ID for attribution
   Future<void> setUserId(String? userId) async {
     _userId = userId;
@@ -225,22 +238,15 @@ class AnalyticsService {
 
     LinkGravityLogger.info('Flushing ${events.length} events...');
 
-    // Attribution for the batch. Every event here came from this device, so one lookup
-    // answers for all of them. The backend can recover this from deviceId alone, but
-    // sending what we already know saves it the query and keeps last-touch correct when
-    // the stored attribution is newer than the install.
-    String? deviceId;
-    String? linkId;
-    try {
-      deviceId = await _storage.getDeviceId();
-      linkId = (await _storage.getAttribution())?.linkId;
-    } catch (e) {
-      LinkGravityLogger.debug('No stored attribution for this batch: $e');
-    }
+    final attribution = await _batchAttribution();
 
     try {
       if (_isOnline) {
-        await _api.sendBatch(events, deviceId: deviceId, linkId: linkId);
+        await _api.sendBatch(
+          events,
+          deviceId: attribution.deviceId,
+          linkId: attribution.linkId,
+        );
         await _storage.saveLastEventSync();
         LinkGravityLogger.info('Successfully sent ${events.length} events');
       } else {
@@ -269,6 +275,29 @@ class AnalyticsService {
     });
   }
 
+  /// Device and link for a batch — one lookup, since every event in it came from the
+  /// same device.
+  ///
+  /// The backend can recover both from `deviceId` alone, but sending the stored link
+  /// keeps last-touch correct when the app has opened a newer link than the one it was
+  /// installed from.
+  Future<({String? deviceId, String? linkId})> _batchAttribution() async {
+    try {
+      return (
+        deviceId: await _storage.getDeviceId(),
+        linkId: (await _storage.getAttribution())?.linkId,
+      );
+    } catch (e) {
+      LinkGravityLogger.debug('No stored attribution for this batch: $e');
+      return (deviceId: null, linkId: null);
+    }
+  }
+
+  /// Drain the offline queue. Normally called from `initialize()` and on reconnect;
+  /// exposed so the retry path can be tested without a connectivity plugin.
+  @visibleForTesting
+  Future<void> retryFailedEventsForTest() => _retryFailedEvents();
+
   /// Retry failed events from storage
   Future<void> _retryFailedEvents() async {
     if (!offlineQueueEnabled) return;
@@ -280,7 +309,15 @@ class AnalyticsService {
 
     try {
       if (_isOnline) {
-        await _api.sendBatch(failed);
+        // Same attribution as a live batch. Without this, every event that ever went
+        // through the offline queue arrived unattributed — the exact failure this
+        // release exists to fix, surviving in the one path that is hardest to notice.
+        final attribution = await _batchAttribution();
+        await _api.sendBatch(
+          failed,
+          deviceId: attribution.deviceId,
+          linkId: attribution.linkId,
+        );
         await _storage.clearFailedEvents();
         LinkGravityLogger.info(
             'Successfully sent ${failed.length} failed events');
