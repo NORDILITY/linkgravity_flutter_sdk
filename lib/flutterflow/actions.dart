@@ -157,7 +157,6 @@ Future<void> trackLinkGravityEventWithJSON({
 /// - [type]: Conversion type (e.g., "purchase", "signup")
 /// - [revenue]: Revenue amount
 /// - [currency]: Currency code (default: "USD")
-/// - [linkId]: Optional link ID to attribute to
 /// - [transactionId]: The store's order id. Pass it — retries are routine on mobile, and
 ///   without it one purchase can be counted several times.
 ///
@@ -168,7 +167,6 @@ Future<bool> trackLinkGravityConversion({
   /// Required: this action always carries revenue, so there is always a currency to
   /// name. It used to default to 'USD', which filed every euro sale as dollars.
   required String currency,
-  String? linkId,
   String? transactionId,
 }) async {
   try {
@@ -176,7 +174,6 @@ Future<bool> trackLinkGravityConversion({
       type: type,
       revenue: revenue,
       currency: currency,
-      linkId: linkId,
       transactionId: transactionId,
     );
     return true;

@@ -787,17 +787,21 @@ class LinkGravityClient {
   /// await linkGravity.trackConversion(
   ///   type: 'purchase',
   ///   revenue: 29.99,
-  ///   currency: 'USD',
-  ///   linkId: 'abc123', // Optional: associate with a specific link
+  ///   currency: 'EUR',
+  ///   transactionId: order.id,
   /// );
   /// ```
   ///
   /// Parameters:
   /// - [type]: Type of conversion (e.g., 'purchase', 'signup', 'subscription')
   /// - [revenue]: Revenue amount (optional)
-  /// - [currency]: Currency code (default: 'USD')
-  /// - [linkId]: Associated link ID for attribution (optional). Left unset, the backend
-  ///   attributes the conversion from this device's install.
+  /// - [currency]: ISO 4217 code. **Required when [revenue] is above zero** — the call is
+  ///   refused rather than guessing, because an invented currency is stored as fact.
+  ///
+  /// There is no  parameter. Attribution is resolved for you, from the deep link
+  /// this session came through or from the device's install — the same way Branch and
+  /// AppsFlyer do it. It used to be accepted here and then silently ignored, which is
+  /// worse than not offering it.
   /// - [transactionId]: The store's order id. **Pass this for anything with revenue.**
   ///   Network drops make retries routine, and without it one $99 purchase is recorded
   ///   three times. With it, repeats collapse onto the first write.
@@ -806,7 +810,6 @@ class LinkGravityClient {
     required String type,
     double? revenue,
     String? currency,
-    String? linkId,
     String? transactionId,
     Map<String, dynamic>? metadata,
   }) async {

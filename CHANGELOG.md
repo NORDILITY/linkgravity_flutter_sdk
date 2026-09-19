@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - **Breaking:** `POST /api/v1/events` no longer accepts events. It answers `410 Gone` naming the new path. There is no compatibility window: a pre-0.5.0 build sends no `deviceId`, `linkId` or revenue, so it could only have produced unattributed rows that look like working data. Rebuild on 0.5.0.
 - **Breaking:** `POST /api/v1/sdk/conversions` is gone, and with it `ApiService.trackConversion`. A purchase is an event that carries money — see below.
+- **Breaking:** `trackConversion(linkId: ...)`. It was accepted and then silently ignored, which is worse than not offering it. Attribution is resolved for you — from the deep link the session came through, or from the device's install — the same way Branch and AppsFlyer do it. Also removed from the FlutterFlow action.
 
 ### Removed
 - **Breaking:** `trackConversion(eventId: ...)`. The backend dropped the field — no SDK path could fill it: the id it referred to is generated server-side and never returned to the client.
