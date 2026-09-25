@@ -232,6 +232,7 @@ class LinkGravityClient {
       LinkGravityLogger.debug('App version: $_appVersion');
 
       // Initialize analytics service
+      _analytics.platform = await _fingerprint.getPlatformName();
       await _analytics.initialize();
 
       // Generate/retrieve device fingerprint
@@ -786,41 +787,58 @@ class LinkGravityClient {
   /// await linkGravity.trackConversion(
   ///   type: 'purchase',
   ///   revenue: 29.99,
-  ///   currency: 'USD',
-  ///   linkId: 'abc123', // Optional: associate with a specific link
+  ///   currency: 'EUR',
+  ///   transactionId: order.id,
   /// );
   /// ```
   ///
   /// Parameters:
   /// - [type]: Type of conversion (e.g., 'purchase', 'signup', 'subscription')
   /// - [revenue]: Revenue amount (optional)
-  /// - [currency]: Currency code (default: 'USD')
-  /// - [linkId]: Associated link ID for attribution (optional)
+  /// - [currency]: ISO 4217 code. **Required when [revenue] is above zero** — the call is
+  ///   refused rather than guessing, because an invented currency is stored as fact.
+  ///
+  /// There is no  parameter. Attribution is resolved for you, from the deep link
+  /// this session came through or from the device's install — the same way Branch and
+  /// AppsFlyer do it. It used to be accepted here and then silently ignored, which is
+  /// worse than not offering it.
+  /// - [transactionId]: The store's order id. **Pass this for anything with revenue.**
+  ///   Network drops make retries routine, and without it one $99 purchase is recorded
+  ///   three times. With it, repeats collapse onto the first write.
   /// - [metadata]: Additional conversion data (optional)
   Future<bool> trackConversion({
     required String type,
     double? revenue,
-    String currency = 'USD',
-    String? linkId,
+    String? currency,
+    String? transactionId,
     Map<String, dynamic>? metadata,
   }) async {
     _ensureInitialized();
 
-    final success = await _api.trackConversion(
-      type: type,
-      revenue: revenue,
-      currency: currency,
-      linkId: linkId,
-      metadata: metadata,
-    );
-
-    if (success) {
-      LinkGravityLogger.info(
-        'Conversion tracked: $type${revenue != null ? ' ($revenue $currency)' : ''}',
+    // `currency` no longer defaults to 'USD'. It used to, so an app selling in euros that
+    // never set it filed every sale as dollars — permanently, and with nothing to indicate
+    // it. An invented currency is worse than a missing one.
+    if ((revenue ?? 0) > 0 && currency == null) {
+      LinkGravityLogger.error(
+        'trackConversion: currency is required when revenue > 0. '
+        'The conversion was not tracked — an invented currency is worse than a missing one.',
       );
+      return false;
     }
 
-    return success;
+    await _analytics.trackEvent(
+      type,
+      metadata,
+      revenue,
+      currency,
+      transactionId,
+    );
+
+    LinkGravityLogger.info(
+      'Conversion queued: $type${revenue != null ? ' ($revenue $currency)' : ''}',
+    );
+
+    return true;
   }
 
   /// Manually flush pending analytics events

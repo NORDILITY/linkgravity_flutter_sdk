@@ -8,7 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Key Capabilities:**
 - **Deferred Deep Linking**: Android (100% deterministic via Play Install Referrer API), iOS (85-90% probabilistic via fingerprint matching)
-- **Link Management**: Create, update, delete, and retrieve LinkGravity short links
+- **Link Creation**: Create LinkGravity short links (`createDynamicLink`). Retrieval and
+  mutation were removed in 0.4.0 — those routes are session-authenticated, so the public
+  key an app ships with could never pass
 - **Deep Link Handling**: Universal Links (iOS) and App Links (Android)
 - **Analytics & Attribution**: Event tracking, conversion tracking, and offline queue
 - **FlutterFlow Integration**: Custom Actions and simplified route registration API
@@ -121,6 +123,27 @@ The `DeferredDeepLinkService` includes retry logic with exponential backoff (3 a
 
 ### Authentication
 The SDK uses `Authorization: Bearer <apiKey>` header format (not `X-API-Key`).
+
+### Analytics Ingest (0.5.0)
+Event batches go to `POST /api/v1/sdk/events`, **not** `/api/v1/events` — the latter is
+kept for one release and then becomes session-only. A batch must carry `deviceId` (and
+`linkId` when known): the backend scopes events by project and attributes them from these,
+and a batch without them lands unattributed and invisible to the dashboard, with no error
+on either side. That was the state of every release before 0.5.0.
+
+`trackConversion` is a wrapper over `trackEvent`: a purchase is an event carrying `revenue`,
+`currency` and `transactionId`. There is no conversions endpoint. Give it a `transactionId`
+whenever revenue is involved — retries are routine on mobile and the backend deduplicates on
+that key, so without it the same purchase counts once per retry.
+
+`currency` is never defaulted and never guessed. It is required when `revenue > 0`, and the
+call is refused otherwise; a non-monetary conversion stores neither field. The backend
+rejects half the pair, at the schema and at a database constraint.
+
+`AnalyticsService.trackEvent` queues; it does not send. Delivery happens in `flush()`,
+which never surfaces failures to the caller (they go to the offline queue), so a silent
+zero in the dashboard is indistinguishable from an app that never fired an event. The
+flush at `batchSize` is deliberately not awaited — see the comment there before changing it.
 
 ### API Response Parsing
 Backend wraps deferred link responses in `{ success: bool, match: {...} }` on iOS and `{ success: bool, deepLinkData: {...}, linkId, ... }` on Android. `DeferredLinkResponse.fromJson` handles both formats (and a flat fallback) for backward compatibility.

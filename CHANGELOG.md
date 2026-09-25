@@ -5,6 +5,35 @@ All notable changes to the LinkGravity Flutter SDK will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-19
+
+### Fixed
+- **Analytics events now reach the dashboard.** Batches carry `deviceId` and `linkId`, so the backend can attribute them and scope them to a project. Without that the events were stored and then filtered out by every dashboard query — the Events chart read zero no matter how many events an app sent, and nothing reported an error.
+- `trackEvent` no longer blocks the caller. Every `batchSize`-th call awaited an HTTP round trip, which freezes the UI when it happens inside an `onPressed` handler on a bad connection. The flush is fired without awaiting; the queue is cleared before the first suspension, so no batch is sent twice.
+- **The platform breakdown now describes something.** Only the SDK's own events set `platform`, so every event an app tracked itself was filed as Unknown. It is attached to all of them now; an explicit `platform` in your properties still wins.
+- Events retried from the offline queue carry attribution. They were re-sent without a device id, so anything that had once hit a bad connection arrived unattributed.
+- `setUserId` is no longer discarded. The value was attached to every event and then dropped when the batch was serialised, so identity stitching had nothing to work with.
+
+### Added
+- `trackConversion(transactionId: ...)`. **Pass it for anything with revenue.** Mobile networks make retries routine, and without a deduplication key one purchase is recorded once per retry. Repeats now collapse onto the first write. Also exposed on the FlutterFlow action.
+- `trackConversion` sends `deviceId`, so a conversion is attributed from the device's install when no `linkId` is given.
+- Conversions inherit the offline queue. **They never had one**: a conversion that hit a network error was logged and discarded, while a failed `screen_view` was written to disk and resent. The path carrying money had the weaker guarantee. It now goes through the same queue — and flushes immediately rather than waiting for the batch, so it does not sit there for 30 seconds either.
+
+### Changed
+- **Breaking:** event batches post to `POST /api/v1/sdk/events` instead of `POST /api/v1/events`. Requires a backend from 19 Sep 2026 or later.
+- **Breaking:** `trackConversion` is now a thin wrapper over `trackEvent` — same method, same arguments, one transport underneath. It returns `true` when the event is **queued**, not when it is delivered; delivery failures go to the offline queue and are retried, which is the behaviour you want and was not what `false` used to mean.
+- **Breaking:** `currency` no longer defaults to `'USD'`. It is required whenever `revenue > 0`, and `trackConversion` refuses the call rather than guessing. An app selling in euros that never set it filed every sale as dollars, permanently, with nothing to indicate it. The FlutterFlow action takes `required String currency`, since its `revenue` was already required.
+- A conversion with no revenue — a signup, a tutorial completion — stores no revenue and no currency, rather than `0.00 USD`. Zero is a measurement; absent is a category, and the two should not look alike in your reports.
+
+### Removed
+- **Breaking:** `POST /api/v1/events` no longer accepts events. It answers `410 Gone` naming the new path. There is no compatibility window: a pre-0.5.0 build sends no `deviceId`, `linkId` or revenue, so it could only have produced unattributed rows that look like working data. Rebuild on 0.5.0.
+- **Breaking:** `POST /api/v1/sdk/conversions` is gone, and with it `ApiService.trackConversion`. A purchase is an event that carries money — see below.
+- **Breaking:** `trackConversion(linkId: ...)`. It was accepted and then silently ignored, which is worse than not offering it. Attribution is resolved for you — from the deep link the session came through, or from the device's install — the same way Branch and AppsFlyer do it. Also removed from the FlutterFlow action.
+
+### Removed
+- **Breaking:** `trackConversion(eventId: ...)`. The backend dropped the field — no SDK path could fill it: the id it referred to is generated server-side and never returned to the client.
+- `ApiService.trackEvent` — unreachable from any public method, and aimed at a path that is becoming session-only. Same cleanup 0.4.0 applied to its siblings.
+
 ## [0.4.0] - 2026-09-14
 
 ### Removed

@@ -223,57 +223,27 @@ class ApiService {
 
 
   /// Track conversion (purchase, signup, etc.)
-  /// POST /api/v1/sdk/conversions
-  ///
-  /// Tracks conversion events like purchases, signups, or other valuable actions.
-  ///
-  /// Parameters:
-  /// - [type]: Type of conversion (e.g., 'purchase', 'signup', 'subscription')
-  /// - [revenue]: Revenue amount (optional)
-  /// - [currency]: Currency code (default: 'USD')
-  /// - [linkId]: Associated link ID for attribution
-  /// - [eventId]: Unique event identifier
-  /// - [metadata]: Additional conversion data
-  Future<bool> trackConversion({
-    required String type,
-    double? revenue,
-    String currency = 'USD',
-    String? linkId,
-    String? eventId,
-    Map<String, dynamic>? metadata,
-  }) async {
-    try {
-      await _post('/api/v1/sdk/conversions', {
-        'type': type,
-        'timestamp': DateTime.now().toIso8601String(),
-        if (revenue != null) 'revenue': revenue,
-        'currency': currency,
-        if (linkId != null) 'linkId': linkId,
-        if (eventId != null) 'eventId': eventId,
-        if (metadata != null) 'metadata': metadata,
-      });
-
-      LinkGravityLogger.info(
-        'Conversion tracked: $type${linkId != null ? ' for $linkId' : ''}',
-      );
-      return true;
-    } catch (e) {
-      LinkGravityLogger.error('Error tracking conversion: $e', e);
-      return false;
-    }
-  }
 
   // ============================================================================
   // ANALYTICS
   // ============================================================================
 
   /// Send batch of analytics events
-  /// POST /api/v1/events (bulk)
+  /// POST /api/v1/sdk/events (bulk)
   ///
-  /// Backend expects: { events: [{ type, properties, timestamp, sessionId }], fingerprint?, deviceId?, sessionId? }
+  /// Backend expects: { events: [{ type, properties, timestamp, sessionId }],
+  /// fingerprint?, deviceId?, sessionId?, linkId?, clickId?, userId? }
   /// SDK sends: { events: [{ id, name, data, timestamp, ... }] }
   /// This method transforms the SDK format to match the backend schema.
-  Future<void> sendBatch(List<AnalyticsEvent> events) async {
+  ///
+  /// [deviceId] and [linkId] are what let the backend attribute these events. Without
+  /// them every event lands unattributed, which is what the whole batch used to do.
+  Future<void> sendBatch(
+    List<AnalyticsEvent> events, {
+    String? deviceId,
+    String? linkId,
+    String? clickId,
+  }) async {
     if (events.isEmpty) return;
 
     // Transform events to match backend schema
@@ -285,6 +255,11 @@ class ApiService {
             'properties': e.data,
             'timestamp': e.timestamp.toIso8601String(),
             if (e.sessionId != null) 'sessionId': e.sessionId,
+            // Money, when the event involved any. Sent per event rather than per batch:
+            // one flush can carry a purchase and the screen views around it.
+            if (e.revenue != null) 'revenue': e.revenue,
+            if (e.currency != null) 'currency': e.currency,
+            if (e.transactionId != null) 'transactionId': e.transactionId,
           },
         )
         .toList();
@@ -292,19 +267,19 @@ class ApiService {
     // Extract common fields from first event (all events in batch share same fingerprint/session)
     final firstEvent = events.first;
 
-    await _post('/api/v1/events', {
+    await _post('/api/v1/sdk/events', {
       'events': eventsJson,
       if (firstEvent.fingerprint != null) 'fingerprint': firstEvent.fingerprint,
       if (firstEvent.sessionId != null) 'sessionId': firstEvent.sessionId,
+      if (deviceId != null) 'deviceId': deviceId,
+      if (linkId != null) 'linkId': linkId,
+      if (clickId != null) 'clickId': clickId,
+      // The app's own user id, from setUserId. It was carried on every AnalyticsEvent and
+      // then dropped here, so identity stitching had nothing to stitch.
+      if (firstEvent.userId != null) 'userId': firstEvent.userId,
     });
 
     LinkGravityLogger.info('Sent ${events.length} events to backend');
-  }
-
-  /// Track single event
-  /// POST /api/v1/events
-  Future<void> trackEvent(AnalyticsEvent event) async {
-    await _post('/api/v1/events', event.toJson());
   }
 
 

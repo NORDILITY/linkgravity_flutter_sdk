@@ -24,6 +24,20 @@ class AnalyticsEvent {
   /// Link ID if event is related to a link
   final String? linkId;
 
+  /// Revenue, when this event involved money. Null for telemetry.
+  ///
+  /// Null rather than 0: zero is a measurement, absent is a category. A signup recorded as
+  /// "earned 0.00" is indistinguishable from a purchase that genuinely earned nothing, and
+  /// it drags down any average computed over conversions.
+  final double? revenue;
+
+  /// ISO 4217 code. Set if and only if [revenue] is — the backend rejects half the pair.
+  final String? currency;
+
+  /// Store order id. Pass it for anything with revenue: mobile networks drop, SDKs retry,
+  /// and without a key the same purchase is counted once per retry.
+  final String? transactionId;
+
   AnalyticsEvent({
     required this.id,
     required this.name,
@@ -33,6 +47,9 @@ class AnalyticsEvent {
     this.sessionId,
     this.fingerprint,
     this.linkId,
+    this.revenue,
+    this.currency,
+    this.transactionId,
   });
 
   factory AnalyticsEvent.fromJson(Map<String, dynamic> json) {
@@ -45,6 +62,9 @@ class AnalyticsEvent {
       sessionId: json['sessionId'] as String?,
       fingerprint: json['fingerprint'] as String?,
       linkId: json['linkId'] as String?,
+      revenue: (json['revenue'] as num?)?.toDouble(),
+      currency: json['currency'] as String?,
+      transactionId: json['transactionId'] as String?,
     );
   }
 
@@ -58,6 +78,9 @@ class AnalyticsEvent {
       if (sessionId != null) 'sessionId': sessionId,
       if (fingerprint != null) 'fingerprint': fingerprint,
       if (linkId != null) 'linkId': linkId,
+      if (revenue != null) 'revenue': revenue,
+      if (currency != null) 'currency': currency,
+      if (transactionId != null) 'transactionId': transactionId,
     };
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/analytics_event.dart';
 import '../models/utm_params.dart';
@@ -40,6 +41,13 @@ class AnalyticsService {
 
   /// Current device fingerprint
   String? _fingerprint;
+
+  /// 'ios' or 'android', attached to every event.
+  ///
+  /// The backend reads `properties.platform` to build the platform breakdown. Only the
+  /// SDK's own events used to set it, so every event an app tracked itself was filed as
+  /// Unknown — the breakdown existed and described nothing.
+  String? _platform;
 
   /// Cached UTM parameters from install (for auto-attachment to events)
   UTMParams? _cachedUTM;
@@ -149,6 +157,9 @@ class AnalyticsService {
   Future<void> trackEvent(
     String eventName, [
     Map<String, dynamic>? properties,
+    double? revenue,
+    String? currency,
+    String? transactionId,
   ]) async {
     if (!enabled) {
       LinkGravityLogger.debug(
@@ -158,6 +169,8 @@ class AnalyticsService {
 
     // Merge user properties with auto-attached UTM parameters
     final eventData = <String, dynamic>{
+      if (_platform != null) 'platform': _platform,
+      // After the caller's own properties, so an explicit platform still wins.
       ...?properties,
       // Auto-attach UTM parameters if available (for attribution)
       if (_cachedUTM != null && _cachedUTM!.isNotEmpty)
@@ -172,19 +185,43 @@ class AnalyticsService {
       userId: _userId,
       sessionId: _sessionId,
       fingerprint: _fingerprint,
+      revenue: revenue,
+      currency: currency,
+      transactionId: transactionId,
     );
 
     _eventQueue.add(event);
     LinkGravityLogger.debug(
         'Event tracked: $eventName (queue size: ${_eventQueue.length})');
 
-    // Check if we should flush
+    // Money does not wait for the batch to fill or the 30s timer.
+    //
+    // Through the queue, not around it. A purchase on its own request can overtake the
+    // add_to_cart still sitting in the batch, and out-of-order events corrupt funnel
+    // analysis in a way that is very hard to see afterwards. Writing it to the queue first
+    // also means it survives the app being killed before the network call.
+    if (revenue != null) {
+      unawaited(flush());
+      return;
+    }
+
+    // Deliberately not awaited. This used to `await flush()`, so one call in every
+    // batchSize blocked on an HTTP round trip — and `trackEvent` is routinely called from
+    // an onPressed handler, where that shows up as a frozen tap on a bad connection.
+    //
+    // Safe because flush() copies and clears _eventQueue before its first await, so a
+    // concurrent trackEvent cannot re-send this batch. Delivery failures were already
+    // invisible to the caller (flush swallows them into the offline queue), so nothing is
+    // lost by not waiting. dispose() still awaits a final flush.
     if (_eventQueue.length >= batchSize) {
-      await flush();
+      unawaited(flush());
     } else {
       _scheduleBatchFlush();
     }
   }
+
+  /// Set the device platform, attached to every subsequent event.
+  set platform(String? value) => _platform = value;
 
   /// Set user ID for attribution
   Future<void> setUserId(String? userId) async {
@@ -218,9 +255,15 @@ class AnalyticsService {
 
     LinkGravityLogger.info('Flushing ${events.length} events...');
 
+    final attribution = await _batchAttribution();
+
     try {
       if (_isOnline) {
-        await _api.sendBatch(events);
+        await _api.sendBatch(
+          events,
+          deviceId: attribution.deviceId,
+          linkId: attribution.linkId,
+        );
         await _storage.saveLastEventSync();
         LinkGravityLogger.info('Successfully sent ${events.length} events');
       } else {
@@ -249,6 +292,29 @@ class AnalyticsService {
     });
   }
 
+  /// Device and link for a batch — one lookup, since every event in it came from the
+  /// same device.
+  ///
+  /// The backend can recover both from `deviceId` alone, but sending the stored link
+  /// keeps last-touch correct when the app has opened a newer link than the one it was
+  /// installed from.
+  Future<({String? deviceId, String? linkId})> _batchAttribution() async {
+    try {
+      return (
+        deviceId: await _storage.getDeviceId(),
+        linkId: (await _storage.getAttribution())?.linkId,
+      );
+    } catch (e) {
+      LinkGravityLogger.debug('No stored attribution for this batch: $e');
+      return (deviceId: null, linkId: null);
+    }
+  }
+
+  /// Drain the offline queue. Normally called from `initialize()` and on reconnect;
+  /// exposed so the retry path can be tested without a connectivity plugin.
+  @visibleForTesting
+  Future<void> retryFailedEventsForTest() => _retryFailedEvents();
+
   /// Retry failed events from storage
   Future<void> _retryFailedEvents() async {
     if (!offlineQueueEnabled) return;
@@ -260,7 +326,15 @@ class AnalyticsService {
 
     try {
       if (_isOnline) {
-        await _api.sendBatch(failed);
+        // Same attribution as a live batch. Without this, every event that ever went
+        // through the offline queue arrived unattributed — the exact failure this
+        // release exists to fix, surviving in the one path that is hardest to notice.
+        final attribution = await _batchAttribution();
+        await _api.sendBatch(
+          failed,
+          deviceId: attribution.deviceId,
+          linkId: attribution.linkId,
+        );
         await _storage.clearFailedEvents();
         LinkGravityLogger.info(
             'Successfully sent ${failed.length} failed events');
