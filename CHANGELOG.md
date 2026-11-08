@@ -5,6 +5,16 @@ All notable changes to the LinkGravity Flutter SDK will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+- **Breaking:** `LinkGravityConfig.enableAutoResolution`. Nothing read it, so setting it did nothing. Short codes are always resolved by `handleDeepLinks`. Delete the argument.
+- **Breaking:** `LinkGravityConfig.trackLifecycleEvents`. Nothing read it either, and no lifecycle events were ever tracked. Delete the argument.
+- The published package no longer includes `web/` (a standalone JavaScript SDK the plugin never used), `CLAUDE.md` or `devtools_options.yaml`.
+
+### Documentation
+- README documents `linkHosts`, `globalMetadata` and `debugSimulateFirstLaunch`, lists every `LogLevel` value and shows the full `resolveShortCode` signature.
+
 ## [0.5.0] - 2026-09-19
 
 ### Fixed

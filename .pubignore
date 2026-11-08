@@ -1,0 +1,17 @@
+# A .pubignore replaces .gitignore for `dart pub publish`, so the .gitignore
+# entries that matter for publishing are repeated here.
+/pubspec.lock
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.claude/
+.idea/
+*.iml
+*.log
+.DS_Store
+
+# Not part of the Flutter plugin
+CLAUDE.md
+devtools_options.yaml
+web/
