@@ -24,7 +24,7 @@ Your app needs to be created in Android Console and or the apple app store (they
 iOS see [setup universal links](https://docs.flutter.dev/cookbook/navigation/set-up-universal-links)
 Android see [setup app links](https://docs.flutter.dev/cookbook/navigation/set-up-app-links).
 
-For Android you do not need to have the App in Console, you can test with this workaroung: Goto app settings of your App -> open by default -> add link -> choose the link gravity link schema.
+For Android you do not need to have the App in Console, you can test with this workaround: go to the app settings of your App -> open by default -> add link -> choose the link gravity link schema.
 
 ### 1. Initialize 
 
@@ -128,9 +128,9 @@ Deep links require platform-specific configuration:
 
 2. Add the following metadata tag and intent filter inside the <activity> tag with .MainActivity.
 
-Replace `{replace_with_your_sub_domain_in_linkgravity}` with your linkgravity subdomain.
+Replace `{your_project_subdomain}` with your LinkGravity subdomain.
 
-Package name can be found in build.gradle.ktr for kotlin or build.grade for java under applicationId.
+The package name is the `applicationId` in `build.gradle.kts` (Kotlin DSL) or `build.gradle` (Groovy).
 
 ```xml
 <intent-filter android:autoVerify="true">
@@ -173,14 +173,19 @@ await LinkGravityClient.initialize(
     enableDeepLinking: true,          // Deep link handling (default: true)
     enableAnalytics: true,            // Event tracking (default: true)
     enableOfflineQueue: true,         // Queue events when offline (default: true)
-    enableAutoResolution: false,      // Auto-resolve short codes before route matching (default: false)
-    logLevel: LogLevel.info,          // debug | info | warning | error
+    logLevel: LogLevel.info,          // none | error | warning | info | debug | verbose
     batchSize: 20,                    // Events per batch (1-100)
     batchTimeout: Duration(seconds: 30),
     requestTimeout: Duration(seconds: 30),
+    linkHosts: ['yourproject.linkg.io'], // Hosts treated as LinkGravity links (default: all http(s) links)
+    globalMetadata: {'appFlavor': 'prod'}, // Added to every tracked event (default: none)
+    debugSimulateFirstLaunch: false,  // Re-run the deferred link lookup on every launch (default: false)
   ),
 );
 ```
+
+- **`linkHosts`**: when the list is empty, every incoming http(s) link is sent to `/resolve`. If your app also opens links on other domains, list your LinkGravity host(s) here. Links on any other host are then passed straight to `onNavigate` for your router to handle.
+- **`debugSimulateFirstLaunch`**: lets you test deferred deep links without installing from the store. Every app start then behaves like a first launch. **Never ship this enabled**: each launch queries the backend and counts against your API limits.
 
 ## API Reference
 
@@ -202,7 +207,7 @@ dashboard for that.
 | `handleDeepLinks({onNavigate})` | Unified callback for regular and deferred deep links |
 | `onDeepLink` | Stream of raw links delivered by the OS |
 | `initialDeepLink` | Raw link string that launched the app (cold start) |
-| `resolveShortCode(String)` | Resolve a short code to its target route |
+| `resolveShortCode(String, {platform, source, cid, fingerprint})` | Resolve a short code to its target route. `handleDeepLinks` already calls this for you |
 
 ### Analytics & Attribution
 
